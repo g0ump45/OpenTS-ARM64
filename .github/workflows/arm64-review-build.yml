@@ -49,7 +49,7 @@ jobs:
               -DCMAKE_CXX_FLAGS=-stdlib=libc++ \
               -DCMAKE_EXE_LINKER_FLAGS=-stdlib=libc++ \
               -DCMAKE_BUILD_TYPE=Release
-            cmake --build /repo/build --target OpenTS --parallel 2
+            cmake --build /repo/build --target OpenTS --parallel 4
             install -m 755 /repo/build/bin/Game /repo/dist/opentsa/Game
             for library in libc++.so.1 libc++abi.so.1 libunwind.so.1; do
               library_path=$(ldconfig -p | grep -m1 " $library " | cut -d \> -f2 | xargs)
@@ -64,6 +64,7 @@ jobs:
               cat /tmp/startup.log
               exit 1
             fi
+            cat /tmp/startup.log
             grep -F "The data directory cannot be used" /tmp/startup.log
           '
           readelf -h -l -d --version-info dist/opentsa/Game
