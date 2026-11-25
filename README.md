@@ -7,7 +7,7 @@ This build brings the OpenTS-A game engine and handheld controls to PortMaster-c
 ## Install
 
 1. Use an **ARM64 Linux handheld** with glibc 2.34 or newer and firmware-provided SDL2.
-2. Download **[OpenTS-ARM-R36S-Verified.zip](https://github.com/g0ump45/OpenTS-ARM/releases/download/v0.1.0-r36s.1/OpenTS-ARM-R36S-Verified.zip)** from the [release page](https://github.com/g0ump45/OpenTS-ARM/releases/tag/v0.1.0-r36s.1).
+2. Download **[OpenTS-ARM-R36S-Verified.zip](https://github.com/g0ump45/OpenTS-ARM64/releases/download/v0.1.0-r36s.1/OpenTS-ARM-R36S-Verified.zip)** from the [release page](https://github.com/g0ump45/OpenTS-ARM64/releases/tag/v0.1.0-r36s.1).
 3. Extract the ZIP contents into your device's `ports/` folder. Keep `OpenTS-A.sh` and the `opentsa/` folder together.
 4. Copy the contents of your Steam **Command & Conquer: Tiberian Sun and Firestorm** install folder into `ports/opentsa/data/`, keeping the game-data files together.
 
@@ -44,7 +44,7 @@ Confirmed working on an **R36S Clone running ArkOS4Clone-20261008**. Other handh
 
 ## Source code
 
-The source snapshot is available as **[OpenTS-ARM-source.tar.gz](https://github.com/g0ump45/OpenTS-ARM/releases/download/v0.1.0-r36s.1/OpenTS-ARM-source.tar.gz)**.
+The source snapshot is available as **[OpenTS-ARM-source.tar.gz](https://github.com/g0ump45/OpenTS-ARM64/releases/download/v0.1.0-r36s.1/OpenTS-ARM-source.tar.gz)**.
 
 ## Support
 
