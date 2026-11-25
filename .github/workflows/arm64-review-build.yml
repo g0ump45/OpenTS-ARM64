@@ -39,8 +39,10 @@ jobs:
             echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] https://apt.llvm.org/buster/ llvm-toolchain-buster-18 main" > /etc/apt/sources.list.d/llvm.list
             apt-get update -qq
             DEBIAN_FRONTEND=noninteractive apt-get install -y -qq clang-18 libc++-18-dev libc++abi-18-dev libunwind-18-dev
-            python3 -m pip install --user cmake==3.23.3
-            export PATH="/root/.local/bin:$PATH"
+            curl -fsSL https://cmake.org/files/v3.31/cmake-3.31.12-linux-aarch64.tar.gz -o /tmp/cmake.tar.gz
+            mkdir -p /opt/cmake
+            tar -xzf /tmp/cmake.tar.gz --strip-components=1 -C /opt/cmake
+            export PATH="/opt/cmake/bin:$PATH"
             cmake -S /repo/build-source -B /repo/build -G Ninja \
               -DOPENTS_PORTMASTER=ON \
               -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18 \
