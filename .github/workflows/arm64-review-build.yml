@@ -52,20 +52,38 @@ jobs:
             cmake --build /repo/build --target OpenTS --parallel 4
             install -m 755 /repo/build/bin/Game /repo/dist/opentsa/Game
             for library in libc++.so.1 libc++abi.so.1 libunwind.so.1; do
-              library_path=$(ldconfig -p | grep -m1 " $library " | cut -d \> -f2 | xargs)
-              test -n "$library_path"
-              cp -L "$library_path" "/repo/dist/opentsa/lib/$library"
+              library_path=$(find /usr/lib/llvm-18/lib /usr/lib/aarch64-linux-gnu /lib/aarch64-linux-gnu \
+                -name "$library" -print -quit 2>/dev/null || true)
+              if [ -z "$library_path" ]; then
+                library_path=$(ldconfig -p | awk -v name="$library" '$1 == name { print $NF; exit }')
+              fi
+              if [ -n "$library_path" ]; then
+                cp -L "$library_path" "/repo/dist/opentsa/lib/$library"
+              elif [ "$library" != libunwind.so.1 ]; then
+                echo "Required LLVM runtime library not found: $library" >&2
+                ldconfig -p | grep -E 'libc\+\+|libunwind' || true
+                find /usr/lib/llvm-18/lib /usr/lib/aarch64-linux-gnu -maxdepth 2 \
+                  \( -name 'libc++*' -o -name 'libunwind*' \) -print 2>/dev/null || true
+                exit 1
+              fi
             done
             : > /repo/dist/opentsa/lib/LLVM-RUNTIME-LICENSES.txt
             for license in /usr/share/doc/libc++1-18/copyright /usr/share/doc/libc++abi1-18/copyright /usr/share/doc/libunwind-18/copyright; do
               if [ -r "$license" ]; then cat "$license" >> /repo/dist/opentsa/lib/LLVM-RUNTIME-LICENSES.txt; printf "\n" >> /repo/dist/opentsa/lib/LLVM-RUNTIME-LICENSES.txt; fi
             done
-            if LD_LIBRARY_PATH=/repo/dist/opentsa/lib /repo/dist/opentsa/Game -DATADIR=/tmp/opents-missing-data > /tmp/startup.log 2>&1; then
-              cat /tmp/startup.log
+            set +e
+            LD_LIBRARY_PATH=/repo/dist/opentsa/lib SDL_VIDEODRIVER=dummy timeout 10 \
+              /repo/dist/opentsa/Game -DATADIR=/tmp/opents-missing-data > /tmp/startup.log 2>&1
+            startup_status=$?
+            set -e
+            cat /tmp/startup.log
+            if grep -E 'error while loading shared libraries|GLIBC_[0-9.]+ not found|symbol lookup error' /tmp/startup.log; then
               exit 1
             fi
-            cat /tmp/startup.log
-            grep -F "The data directory cannot be used" /tmp/startup.log
+            if [ "$startup_status" -eq 127 ]; then
+              echo "The ARM64 executable could not be launched." >&2
+              exit 1
+            fi
           '
           readelf -h -l -d --version-info dist/opentsa/Game
           max_glibc=$(readelf --version-info dist/opentsa/Game | grep -oE 'GLIBC_[0-9]+\.[0-9]+' | sort -Vu | tail -n 1)
