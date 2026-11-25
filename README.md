@@ -9,11 +9,30 @@ This build brings the OpenTS-A game engine and handheld controls to PortMaster-c
 1. Use an **ARM64 Linux handheld** with glibc 2.34 or newer and firmware-provided SDL2.
 2. Download **[OpenTS-ARM-R36S-Verified.zip](https://github.com/g0ump45/OpenTS-ARM/releases/download/v0.1.0-portmaster-test.1/OpenTS-ARM-R36S-Verified.zip)** from the [release page](https://github.com/g0ump45/OpenTS-ARM/releases/latest).
 3. Extract the ZIP contents into your device's `ports/` folder. Keep `OpenTS-A.sh` and the `opentsa/` folder together.
-4. Copy the **complete game-data set** from your installed Tiberian Sun folder into `ports/opentsa/data/`. Do not copy only `TIBSUN.MIX`: the game also needs the other data archives and files, such as MIX archives, maps, movies, audio, INI files, and loose game assets. If you want to play Firestorm, include its expansion data too.
-5. Keep `TIBSUN.MIX` directly in `ports/opentsa/data/`. The launcher checks for that file as a quick presence check; it does not mean that file alone is enough to run the game.
-6. Launch **OpenTS-A** from your handheld's Ports menu.
+4. Copy the contents of your Steam **Command & Conquer: Tiberian Sun** install folder into `ports/opentsa/data/`, keeping the game-data files together.
 
-The game files are not included. Use files from a copy of Tiberian Sun that you own.
+## Required game files
+
+Your install folder should contain these game-data archives:
+
+- `TIBSUN.MIX` and `GMENU.MIX`
+- `EXPAND01.MIX`, `EXPAND02.MIX`, `EXPAND03.MIX`
+- `E01SCD01.MIX`, `E01SCD02.MIX`
+- `MAPS01.MIX`, `MAPS02.MIX`, `maps03.mix`
+- `MOVIES01.MIX`, `MOVIES02.MIX`, `movies03.mix`
+- `MULTI.MIX`, `PATCH.MIX`
+- `SCORES.MIX`, `SCORES01.MIX`
+- `sidecd01.mix`, `sidecd02.mix`, `wdt.mix`, `wdtvox.mix`
+
+Put the files in this location:
+
+```
+ports/opentsa/data/TIBSUN.MIX
+ports/opentsa/data/GMENU.MIX
+ports/opentsa/data/...
+```
+
+**TIBSUN.MIX alone is not enough.** The launcher checks for it as a quick presence check; the game needs the other archives too. If you want to play Firestorm, include its expansion game data as well. Game files are not included with this port.
 
 ## Controls
 
