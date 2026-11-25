@@ -128,7 +128,7 @@ diff --git a/code/portmaster_input.cpp b/code/portmaster_input.cpp
 +			break;
 +		case SDL_FINGERDOWN:
 +			if (ActiveFinger < 0) {
-+				SDL_Window *window = SDL_GetWindowFromID(event.tfinger.windowID);
++				SDL_Window *window = SDL_GetKeyboardFocus();
 +				if (!window) window = SDL_GetMouseFocus();
 +				int window_width = 0, window_height = 0;
 +				if (window) SDL_GetWindowSize(window, &window_width, &window_height);
@@ -141,7 +141,7 @@ diff --git a/code/portmaster_input.cpp b/code/portmaster_input.cpp
 +			break;
 +		case SDL_FINGERMOTION:
 +			if (ActiveFinger == event.tfinger.fingerId) {
-+				SDL_Window *window = SDL_GetWindowFromID(event.tfinger.windowID);
++				SDL_Window *window = SDL_GetKeyboardFocus();
 +				if (!window) window = SDL_GetMouseFocus();
 +				int window_width = 0, window_height = 0;
 +				if (window) SDL_GetWindowSize(window, &window_width, &window_height);
@@ -151,7 +151,7 @@ diff --git a/code/portmaster_input.cpp b/code/portmaster_input.cpp
 +			break;
 +		case SDL_FINGERUP:
 +			if (ActiveFinger == event.tfinger.fingerId) {
-+				SDL_Window *window = SDL_GetWindowFromID(event.tfinger.windowID);
++				SDL_Window *window = SDL_GetKeyboardFocus();
 +				if (!window) window = SDL_GetMouseFocus();
 +				int window_width = 0, window_height = 0;
 +				if (window) SDL_GetWindowSize(window, &window_width, &window_height);
