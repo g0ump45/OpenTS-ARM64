@@ -60,7 +60,7 @@ jobs:
             for license in /usr/share/doc/libc++1-18/copyright /usr/share/doc/libc++abi1-18/copyright /usr/share/doc/libunwind-18/copyright; do
               if [ -r "$license" ]; then cat "$license" >> /repo/dist/opentsa/lib/LLVM-RUNTIME-LICENSES.txt; printf "\n" >> /repo/dist/opentsa/lib/LLVM-RUNTIME-LICENSES.txt; fi
             done
-            if /repo/dist/opentsa/Game -DATADIR=/tmp/opents-missing-data > /tmp/startup.log 2>&1; then
+            if LD_LIBRARY_PATH=/repo/dist/opentsa/lib /repo/dist/opentsa/Game -DATADIR=/tmp/opents-missing-data > /tmp/startup.log 2>&1; then
               cat /tmp/startup.log
               exit 1
             fi
