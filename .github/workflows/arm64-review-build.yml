@@ -32,10 +32,10 @@ jobs:
           docker run --rm -v "$PWD:/repo" -w /repo debian:bookworm bash -euc '
             apt-get update -qq
             DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-              clang cmake g++ git libsdl2-dev ninja-build pkg-config
+              cmake g++ git libsdl2-dev ninja-build pkg-config
             cmake -S /repo/build-source -B /repo/build -G Ninja \
               -DOPENTS_PORTMASTER=ON \
-              -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+              -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
               -DCMAKE_BUILD_TYPE=Release
             cmake --build /repo/build --target OpenTS --parallel 2
             install -m 755 /repo/build/bin/Game /repo/dist/opents-a/Game
