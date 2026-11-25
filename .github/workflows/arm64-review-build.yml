@@ -39,7 +39,7 @@ jobs:
             echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] https://apt.llvm.org/buster/ llvm-toolchain-buster-18 main" > /etc/apt/sources.list.d/llvm.list
             apt-get update -qq
             DEBIAN_FRONTEND=noninteractive apt-get install -y -qq clang-18 libc++-18-dev libc++abi-18-dev libunwind-18-dev
-            python3 -m pip install --user cmake==3.23.5
+            python3 -m pip install --user cmake==3.23.3
             export PATH="/root/.local/bin:$PATH"
             cmake -S /repo/build-source -B /repo/build -G Ninja \
               -DOPENTS_PORTMASTER=ON \
