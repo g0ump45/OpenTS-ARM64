@@ -1,0 +1,87 @@
+name: ARM64 draft review build
+
+on:
+  push:
+    branches: [arm64-build-review]
+    paths:
+      - '.github/workflows/arm64-review-build.yml'
+      - 'OpenTS-ARM64-16x9-touch-controls.patch'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare the updated source and package layout
+        run: |
+          set -euo pipefail
+          mkdir -p build-source dist/opents-a/data
+          tar -xzf OpenTS-ARM-source.tar.gz --strip-components=1 -C build-source
+          patch -d build-source -p1 < OpenTS-ARM64-16x9-touch-controls.patch
+          cp build-source/platform/portmaster/OpenTS-A.sh dist/
+          cp build-source/LICENSE.md build-source/THIRD_PARTY_NOTICES.md \
+            build-source/platform/portmaster/README.md dist/opents-a/
+
+      - name: Compile the ARM64 game and check startup handling
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD:/repo" -w /repo debian:bookworm bash -euc '
+            apt-get update -qq
+            DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+              clang cmake g++ git libsdl2-dev ninja-build pkg-config
+            cmake -S /repo/build-source -B /repo/build -G Ninja \
+              -DOPENTS_PORTMASTER=ON \
+              -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+              -DCMAKE_BUILD_TYPE=Release
+            cmake --build /repo/build --target OpenTS --parallel 2
+            install -m 755 /repo/build/bin/Game /repo/dist/opents-a/Game
+            if /repo/dist/opents-a/Game -DATADIR=/tmp/opents-missing-data > /tmp/startup.log 2>&1; then
+              cat /tmp/startup.log
+              exit 1
+            fi
+            grep -F "The data directory cannot be used" /tmp/startup.log
+          '
+          readelf -h -l -d --version-info dist/opents-a/Game
+          (cd dist && zip -r ../OpenTS-ARM64-Widescreen-Touch-Update.zip OpenTS-A.sh opents-a)
+
+      - name: Keep a build artifact for inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenTS-ARM64-Widescreen-Touch-Update
+          path: OpenTS-ARM64-Widescreen-Touch-Update.zip
+          if-no-files-found: error
+
+      - name: Attach the package to the GitHub draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          release_id=$(gh api "repos/${GITHUB_REPOSITORY}/releases" --paginate \
+            --jq '.[] | select(.draft == true and .name == "OpenTS-ARM64 — Widescreen and Controls Update") | .id' | head -n 1)
+          if [ -z "$release_id" ]; then
+            echo 'The expected review draft was not found; keeping the build as an Actions artifact.'
+            exit 1
+          fi
+          curl --fail-with-body --silent --show-error --location --request POST \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'Content-Type: application/octet-stream' \
+            --data-binary @OpenTS-ARM64-Widescreen-Touch-Update.zip \
+            "https://uploads.github.com/repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets?name=OpenTS-ARM64-Widescreen-Touch-Update.zip"
+          body=$(cat <<'BODY'
+          Draft for review — not public. The ARM64 package was built on GitHub's Ubuntu 24.04 ARM runner using Debian Bookworm dependencies. Its startup smoke check passed. It has not been tested on an RP6 or R36S device.
+
+          This update addresses the RP6 display and touchscreen feedback:
+          - The game chooses a widescreen battlefield width for the device display while retaining its 480-pixel logical height.
+          - Touch taps and drags are mapped into game coordinates.
+          - “Place Ready Building” is assignable in Options > Controls.
+          - The Controls menu layout and ARM64 README are updated.
+
+          The ZIP is an installable ARM64 test build, but still needs device testing before publication. The attached source archive, patch, and README are included for review.
+          BODY
+          )
+          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${release_id}" -f body="$body" >/dev/null

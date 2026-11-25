@@ -1,0 +1,395 @@
+diff --git a/code/android_options.cpp b/code/android_options.cpp
+--- a/code/android_options.cpp	2026-11-25 00:41:50.063777700 +0000
++++ b/code/android_options.cpp	2026-11-25 10:52:19.705504153 +0000
+@@ -822,15 +822,15 @@
+ void Touch_Controls(Menu & menu)
+ {
+ 	static char const * actions[PM_CONTROL_COUNT] = {"Select / Confirm", "Cancel / Right Click", "Groups / Base Buttons",
+-		"Options / Skip Movie", "Select Same Unit", "Attack Move", "Zoom Out", "Zoom In"};
++		"Options / Skip Movie", "Select Same Unit", "Attack Move", "Zoom Out", "Zoom In", "Place Ready Building"};
+ 	for (;;) {
+ 		std::vector<Choice> choices;
+ 		for (int i = 0; i < PM_CONTROL_COUNT; ++i)
+ 			choices.push_back({10 + i, std::string(actions[i]) + ": " + PortMaster_Button_Name(PortMaster_Control_Button(i)),
+-				100, 86 + i * 35, 440});
+-		choices.push_back({30, "Cursor Speed: " + std::to_string(PortMaster_Cursor_Speed()), 150, 370, 340});
+-		choices.push_back({31, "Slower", 100, 405, 130});
+-		choices.push_back({32, "Faster", 410, 405, 130});
++				100, 68 + i * 31, 440});
++		choices.push_back({30, "Cursor Speed: " + std::to_string(PortMaster_Cursor_Speed()), 150, 350, 340});
++		choices.push_back({31, "Slower", 100, 390, 130});
++		choices.push_back({32, "Faster", 410, 390, 130});
+ 		int const result = menu.Show("Controls", choices);
+ 		if (result >= 10 && result < 10 + PM_CONTROL_COUNT) {
+ 			int const action = result - 10;
+diff --git a/code/portmaster_input.cpp b/code/portmaster_input.cpp
+--- a/code/portmaster_input.cpp	2026-11-25 01:04:24.664653500 +0000
++++ b/code/portmaster_input.cpp	2026-11-25 10:50:11.733387359 +0000
+@@ -20,6 +20,7 @@
+ #include "keyboard.h"
+ #include "video.h"
+ #include "gamedirs.h"
++#include "sidebar.h"
+ 
+ #include <SDL.h>
+ 
+@@ -33,7 +34,7 @@
+ bool KeysHeld[256]{};
+ int ControlButtons[PM_CONTROL_COUNT] = {SDL_CONTROLLER_BUTTON_A, SDL_CONTROLLER_BUTTON_B,
+ 	SDL_CONTROLLER_BUTTON_BACK, SDL_CONTROLLER_BUTTON_START, SDL_CONTROLLER_BUTTON_X,
+-	SDL_CONTROLLER_BUTTON_Y, SDL_CONTROLLER_BUTTON_LEFTSHOULDER, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER};
++	SDL_CONTROLLER_BUTTON_Y, SDL_CONTROLLER_BUTTON_LEFTSHOULDER, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER, -1};
+ int CursorSpeed = 6;
+ int CaptureAction = -1;
+ int CapturedButton = -1;
+@@ -41,6 +42,7 @@
+ bool NameEntryActive = false;
+ int NameEntryLetter = 0;
+ int NameEntryPendingKey = 0;
++SDL_FingerID ActiveFinger = -1;
+ 
+ void Load_Controls()
+ {
+@@ -49,14 +51,15 @@
+ 	FILE *file = std::fopen(User_File_Write_Name("PORTMASTER-CONTROLS.cfg").c_str(), "r");
+ 	if (!file) return;
+ 	int version = 0, values[PM_CONTROL_COUNT]{};
+-	bool valid = std::fscanf(file, "%d", &version) == 1 && version == 1;
+-	for (int &value : values) valid = valid && std::fscanf(file, "%d", &value) == 1;
++	bool valid = std::fscanf(file, "%d", &version) == 1 && (version == 1 || version == 2);
++	for (int i = 0; i < (version == 1 ? PM_CONTROL_COUNT - 1 : PM_CONTROL_COUNT); ++i)
++		valid = valid && std::fscanf(file, "%d", &values[i]) == 1;
+ 	int speed = CursorSpeed;
+ 	valid = valid && std::fscanf(file, "%d", &speed) == 1;
+ 	std::fclose(file);
+ 	if (!valid) return;
+-	for (int i = 0; i < PM_CONTROL_COUNT; ++i)
+-		if (values[i] >= 0 && values[i] < SDL_CONTROLLER_BUTTON_MAX) ControlButtons[i] = values[i];
++	for (int i = 0; i < (version == 1 ? PM_CONTROL_COUNT - 1 : PM_CONTROL_COUNT); ++i)
++		if (values[i] == -1 || (values[i] >= 0 && values[i] < SDL_CONTROLLER_BUTTON_MAX)) ControlButtons[i] = values[i];
+ 	CursorSpeed = std::clamp(speed, 1, 16);
+ }
+ 
+@@ -116,6 +119,14 @@
+ 	Video_Mark_Dirty();
+ }
+ 
++bool Set_Pointer_From_Window(float x, float y)
++{
++	int frame_x = 0, frame_y = 0;
++	if (!PortMaster_Map_Window_To_Frame(x, y, frame_x, frame_y)) return false;
++	Set_Pointer_From_Frame(frame_x, frame_y);
++	return true;
++}
++
+ void SendClick(unsigned short key, bool pressed, bool &held)
+ {
+ 	if (pressed == held || !Keyboard) {
+@@ -215,7 +226,7 @@
+ 	std::string path = User_File_Write_Name("PORTMASTER-CONTROLS.cfg"), temporary = path + ".tmp";
+ 	FILE *file = std::fopen(temporary.c_str(), "w");
+ 	if (!file) return false;
+-	bool ok = std::fprintf(file, "1") > 0;
++	bool ok = std::fprintf(file, "2") > 0;
+ 	for (int value : ControlButtons) ok = ok && std::fprintf(file, " %d", value) > 0;
+ 	ok = ok && std::fprintf(file, " %d\n", CursorSpeed) > 0;
+ 	bool closed = std::fclose(file) == 0;
+@@ -334,6 +345,8 @@
+ 				!LeftHeld && !RightHeld && !Map.PendingObjectPtr) {
+ 					if (event.cbutton.button == ControlButtons[PM_CONTROL_SELECT_TYPE]) {
+ 						Execute_Command("SelectType");
++					} else if (event.cbutton.button == ControlButtons[PM_CONTROL_PLACE_READY_BUILDING]) {
++						if (Map.Place_Ready_Building()) Video_Mark_Dirty();
+ 					} else if (event.cbutton.button == ControlButtons[PM_CONTROL_ATTACK_MOVE]) {
+ 						Point2D const cursor = Keyboard->Get_Mouse_Position();
+ 						if (TacticalRect.Is_Point_Within(cursor)) {
+@@ -349,20 +362,59 @@
+ 			Update_Keyboard(event.key);
+ 			break;
+ 		case SDL_MOUSEMOTION:
+-			if (event.motion.which != SDL_TOUCH_MOUSEID) Set_Pointer_From_Frame(event.motion.x, event.motion.y);
++			if (event.motion.which != SDL_TOUCH_MOUSEID || ActiveFinger < 0)
++				Set_Pointer_From_Window(event.motion.x, event.motion.y);
+ 			break;
+ 		case SDL_MOUSEBUTTONDOWN:
+ 		case SDL_MOUSEBUTTONUP:
+-			if (event.button.which != SDL_TOUCH_MOUSEID) {
+-				Set_Pointer_From_Frame(event.button.x, event.button.y);
++			if (event.button.which != SDL_TOUCH_MOUSEID || ActiveFinger < 0) {
+ 				bool const pressed = event.type == SDL_MOUSEBUTTONDOWN;
+-				if (event.button.button == SDL_BUTTON_LEFT) SendClick(KN_LMOUSE, pressed, LeftHeld);
+-				else if (event.button.button == SDL_BUTTON_RIGHT) SendClick(KN_RMOUSE, pressed, RightHeld);
++				bool const inside = Set_Pointer_From_Window(event.button.x, event.button.y);
++				if (inside || !pressed) {
++					if (event.button.button == SDL_BUTTON_LEFT) SendClick(KN_LMOUSE, pressed, LeftHeld);
++					else if (event.button.button == SDL_BUTTON_RIGHT) SendClick(KN_RMOUSE, pressed, RightHeld);
++				}
++			}
++			break;
++		case SDL_FINGERDOWN:
++			if (ActiveFinger < 0) {
++				SDL_Window *window = SDL_GetWindowFromID(event.tfinger.windowID);
++				if (!window) window = SDL_GetMouseFocus();
++				int window_width = 0, window_height = 0;
++				if (window) SDL_GetWindowSize(window, &window_width, &window_height);
++				if (window && window_width > 0 && window_height > 0 &&
++					Set_Pointer_From_Window(event.tfinger.x * window_width, event.tfinger.y * window_height)) {
++					ActiveFinger = event.tfinger.fingerId;
++					SendClick(KN_LMOUSE, true, LeftHeld);
++				}
++			}
++			break;
++		case SDL_FINGERMOTION:
++			if (ActiveFinger == event.tfinger.fingerId) {
++				SDL_Window *window = SDL_GetWindowFromID(event.tfinger.windowID);
++				if (!window) window = SDL_GetMouseFocus();
++				int window_width = 0, window_height = 0;
++				if (window) SDL_GetWindowSize(window, &window_width, &window_height);
++				if (window && window_width > 0 && window_height > 0)
++					Set_Pointer_From_Window(event.tfinger.x * window_width, event.tfinger.y * window_height);
++			}
++			break;
++		case SDL_FINGERUP:
++			if (ActiveFinger == event.tfinger.fingerId) {
++				SDL_Window *window = SDL_GetWindowFromID(event.tfinger.windowID);
++				if (!window) window = SDL_GetMouseFocus();
++				int window_width = 0, window_height = 0;
++				if (window) SDL_GetWindowSize(window, &window_width, &window_height);
++				if (window && window_width > 0 && window_height > 0)
++					Set_Pointer_From_Window(event.tfinger.x * window_width, event.tfinger.y * window_height);
++				SendClick(KN_LMOUSE, false, LeftHeld);
++				ActiveFinger = -1;
+ 			}
+ 			break;
+ 		case SDL_WINDOWEVENT:
+ 			if (event.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
+ 				ReleaseClicks();
++				ActiveFinger = -1;
+ 				std::fill_n(KeysHeld, 256, false);
+ 			}
+ 			break;
+diff --git a/code/portmaster_input.h b/code/portmaster_input.h
+--- a/code/portmaster_input.h	2026-11-25 00:47:17.197042000 +0000
++++ b/code/portmaster_input.h	2026-11-25 10:45:31.002065331 +0000
+@@ -8,6 +8,7 @@
+ bool PortMaster_Quit_Requested();
+ bool PortMaster_Battlefield_Input_Active();
+ void PortMaster_Adjust_Zoom(int step);
++bool PortMaster_Map_Window_To_Frame(float x, float y, int & frame_x, int & frame_y);
+ Point2D PortMaster_Battlefield_View_Size();
+ Point2D PortMaster_Pointer_To_Frame(Point2D point);
+ Point2D PortMaster_Pointer_From_Frame(Point2D point);
+@@ -16,6 +17,7 @@
+ enum PortMasterControlAction {
+ 	PM_CONTROL_LEFT_CLICK, PM_CONTROL_RIGHT_CLICK, PM_CONTROL_GROUPS, PM_CONTROL_OPTIONS,
+ 	PM_CONTROL_SELECT_TYPE, PM_CONTROL_ATTACK_MOVE, PM_CONTROL_ZOOM_OUT, PM_CONTROL_ZOOM_IN,
++	PM_CONTROL_PLACE_READY_BUILDING,
+ 	PM_CONTROL_COUNT
+ };
+ void PortMaster_Begin_Button_Capture(int action);
+diff --git a/code/portmaster_video.cpp b/code/portmaster_video.cpp
+--- a/code/portmaster_video.cpp	2026-11-25 00:41:28.143959800 +0000
++++ b/code/portmaster_video.cpp	2026-11-25 10:50:11.633387580 +0000
+@@ -30,8 +30,8 @@
+ int VideoModeHeight = 0;
+ 
+ namespace {
+-constexpr int FrameWidth = 640;
+-constexpr int FrameHeight = 480;
++int FrameWidth = 640;
++int FrameHeight = 480;
+ PortMasterVideo Presenter{};
+ VideoScaleInfo ScaleInfo{};
+ bool FrameDirty = false;
+@@ -101,6 +101,8 @@
+ 
+ 	SDL_ShowCursor(SDL_DISABLE);
+ 	LogFrameTiming = SDL_getenv("OPENTS_FRAME_TIMING") != nullptr;
++	FrameWidth = Presenter.width;
++	FrameHeight = Presenter.height;
+ 	VideoModeWidth = FrameWidth;
+ 	VideoModeHeight = FrameHeight;
+ 	int width = FrameWidth;
+@@ -141,6 +143,22 @@
+ 	Video_Mark_Dirty();
+ }
+ 
++bool PortMaster_Map_Window_To_Frame(float x, float y, int & frame_x, int & frame_y)
++{
++	if (!Presenter.window || ScaleInfo.DestWidth <= 0 || ScaleInfo.DestHeight <= 0) return false;
++	int window_width = 0, window_height = 0;
++	SDL_GetWindowSize(Presenter.window, &window_width, &window_height);
++	if (window_width <= 0 || window_height <= 0) return false;
++	int const drawable_x = static_cast<int>(x * ScaleInfo.DrawableWidth / window_width);
++	int const drawable_y = static_cast<int>(y * ScaleInfo.DrawableHeight / window_height);
++	if (drawable_x < ScaleInfo.DestX || drawable_y < ScaleInfo.DestY ||
++		drawable_x >= ScaleInfo.DestX + ScaleInfo.DestWidth ||
++		drawable_y >= ScaleInfo.DestY + ScaleInfo.DestHeight) return false;
++	frame_x = std::clamp((drawable_x - ScaleInfo.DestX) * ScaleInfo.GameWidth / ScaleInfo.DestWidth, 0, ScaleInfo.GameWidth - 1);
++	frame_y = std::clamp((drawable_y - ScaleInfo.DestY) * ScaleInfo.GameHeight / ScaleInfo.DestHeight, 0, ScaleInfo.GameHeight - 1);
++	return true;
++}
++
+ void Video_Set_Refresh_Rate(int refreshrate)
+ {
+ 	PresentInterval = 1000U / static_cast<unsigned>(refreshrate > 0 ? refreshrate : 60);
+@@ -193,7 +211,12 @@
+ 
+ 	Rect const crop = Battlefield_Crop();
+ 	Presenter.zoom_source = {crop.X, crop.Y, crop.Width, crop.Height};
+-	Presenter.zoom_destination = {TacticalRect.X, TacticalRect.Y, TacticalRect.Width, TacticalRect.Height};
++	Presenter.zoom_destination = {
++		ScaleInfo.DestX + TacticalRect.X * ScaleInfo.DestWidth / FrameWidth,
++		ScaleInfo.DestY + TacticalRect.Y * ScaleInfo.DestHeight / FrameHeight,
++		TacticalRect.Width * ScaleInfo.DestWidth / FrameWidth,
++		TacticalRect.Height * ScaleInfo.DestHeight / FrameHeight};
++	Presenter.destination = {ScaleInfo.DestX, ScaleInfo.DestY, ScaleInfo.DestWidth, ScaleInfo.DestHeight};
+ 	Presenter.cursor_visible = SDL_FALSE;
+ 	void const *frame_pixels = surface->Get_Buffer();
+ 	int frame_pitch = surface->Stride();
+diff --git a/code/sidebar.cpp b/code/sidebar.cpp
+--- a/code/sidebar.cpp	2026-11-22 05:35:30.000000000 +0000
++++ b/code/sidebar.cpp	2026-11-25 10:53:53.720880172 +0000
+@@ -1165,6 +1165,32 @@
+ }
+ 
+ 
++bool SidebarClass::Place_Ready_Building(void)
++{
++	if (!IsSidebarActive || !PlayerPtr) return false;
++	for (int column = 0; column < COLUMNS; ++column) {
++		StripClass & strip = Column[column];
++		for (int index = 0; index < strip.BuildableCount; ++index) {
++			StripClass::BuildType const & item = strip.Buildables[index];
++			FactoryClass * factory = item.Factory;
++			if (item.BuildableType != RTTI_BUILDINGTYPE || !factory || factory->Is_Building() || !factory->Has_Completed()) continue;
++
++			/* Make the completed item visible, then reuse the normal sidebar action. */
++			int const visible = Map.Max_Visible();
++			int const new_top = std::min(index, std::max(0, strip.BuildableCount - visible));
++			int const slot = index - new_top;
++			if (slot < 0 || slot >= visible) continue;
++			strip.TopIndex = new_top;
++			strip.IsToRedraw = true;
++			strip.Flag_To_Redraw();
++			StripClass::SelectButton[column][slot].Activate_Ready_Item();
++			return true;
++		}
++	}
++	return false;
++}
++
++
+ /***********************************************************************************************
+  * SidebarClass::Recalc -- Examines the sidebar data and updates it as necessary.              *
+  *                                                                                             *
+@@ -2312,6 +2338,12 @@
+ 	Index = index;
+ }
+ 
++void SidebarClass::StripClass::SelectClass::Activate_Ready_Item(void)
++{
++	KeyNumType key = KN_LMOUSE;
++	Action(LEFTPRESS, key);
++}
++
+ 
+ /***********************************************************************************************
+  * SidebarClass::StripClass::SelectClass:: -- Action function when buildable cameo is selected *
+diff --git a/code/sidebar.h b/code/sidebar.h
+--- a/code/sidebar.h	2026-11-22 05:35:30.000000000 +0000
++++ b/code/sidebar.h	2026-11-25 10:43:20.798444467 +0000
+@@ -120,6 +120,7 @@
+ 		bool Activate(int control);
+ 		bool Add(RTTIType type, int ID);
+ 		bool Sidebar_Click(KeyNumType & input, int x, int y);
++		bool Place_Ready_Building(void);
+ 		void Recalc(void);
+ 		bool Factory_Link(FactoryClass * factory, RTTIType type, int id);
+ 		bool Is_On_Sidebar(RTTIType type, int id) const;
+@@ -143,6 +144,7 @@
+ 					SelectClass(void);
+ 
+ 					void Set_Owner(StripClass & strip, int index);
++					void Activate_Ready_Item(void);
+ 
+ 					StripClass * Strip;
+ 					int Index;
+diff --git a/platform/portmaster/README.md b/platform/portmaster/README.md
+--- a/platform/portmaster/README.md	2026-11-22 05:35:30.000000000 +0000
++++ b/platform/portmaster/README.md	2026-11-25 10:51:25.885205017 +0000
+@@ -52,8 +52,10 @@
+ cmake --build build/portmaster --target OpenTS
+ ```
+ 
+-The offline engine builds independently of bgfx and uses a fixed 640×480 SDL
+-video backend. A successful build alone does not verify game startup on an R36S.
++The offline engine builds independently of bgfx. Its SDL video backend keeps a
++480-pixel game-frame height and widens the battlefield to match the handheld's
++display ratio, with a 640-pixel minimum width. A successful build alone does not
++verify game startup on an R36S.
+ 
+ ## Test the engine on dArkOSRE
+ 
+@@ -70,7 +72,9 @@
+    the engine. Settings and saves go under `opents-a/user`.
+ 4. Refresh Ports and launch **OpenTS-A**. Check that the menu appears. Move the
+    cursor with the left stick and D-pad, use A for left click, B for right
+-   click and Start for Escape. Try starting a skirmish, then quit through the
+-   main menu and check that the frontend returns.
++   click and Start for Escape. On touchscreen devices, tap to click and drag
++   to move while holding the click. Assign **Place Ready Building** to a face
++   button under **Options > Controls** if wanted. Try starting a skirmish,
++   then quit through the main menu and check that the frontend returns.
+ 5. Keep `opents-a/opents.log` and `opents-r36s-check/check.log`. Record the
+    last screen reached and whether the cursor, buttons, audio and exit worked.
+diff --git a/platform/portmaster/video.c b/platform/portmaster/video.c
+--- a/platform/portmaster/video.c	2026-11-25 00:41:33.835912200 +0000
++++ b/platform/portmaster/video.c	2026-11-25 10:50:11.521387830 +0000
+@@ -11,17 +11,24 @@
+     if (video->window) {
+         video->renderer = SDL_CreateRenderer(video->window, -1, 0);
+     }
++    int output_width = width, output_height = height;
++    if (video->renderer) SDL_GetRendererOutputSize(video->renderer, &output_width, &output_height);
++    if (output_width > 0 && output_height > 0) {
++        int const aspect_width = (int)(((Sint64)height * output_width + output_height / 2) / output_height);
++        if (aspect_width > width) width = aspect_width;
++    }
+     if (video->renderer) {
+         video->texture = SDL_CreateTexture(video->renderer, SDL_PIXELFORMAT_RGB565,
+             SDL_TEXTUREACCESS_STREAMING, width, height);
+     }
+-    if (!video->texture || SDL_RenderSetLogicalSize(video->renderer, width, height) != 0) {
++    if (!video->texture) {
+         PortMaster_CloseVideo(video);
+         return -1;
+     }
+ 
+     video->width = width;
+     video->height = height;
++    video->destination = (SDL_Rect){0, 0, output_width, output_height};
+     return 0;
+ }
+ 
+@@ -32,7 +39,8 @@
+     }
+     if (SDL_UpdateTexture(video->texture, NULL, pixels, pitch) != 0 ||
+         SDL_RenderClear(video->renderer) != 0 ||
+-        SDL_RenderCopy(video->renderer, video->texture, NULL, NULL) != 0) {
++        SDL_RenderCopy(video->renderer, video->texture, NULL,
++            video->destination.w > 0 && video->destination.h > 0 ? &video->destination : NULL) != 0) {
+         return -1;
+     }
+     if (video->zoom_source.w > 0 &&
+diff --git a/platform/portmaster/video.h b/platform/portmaster/video.h
+--- a/platform/portmaster/video.h	2026-11-22 05:35:30.000000000 +0000
++++ b/platform/portmaster/video.h	2026-11-25 10:43:20.466445134 +0000
+@@ -17,6 +17,7 @@
+     SDL_Point cursor;
+     SDL_Rect zoom_source;
+     SDL_Rect zoom_destination;
++    SDL_Rect destination;
+ } PortMasterVideo;
+ 
+ /* The caller initializes SDL and supplies a zero-initialized video object. */
