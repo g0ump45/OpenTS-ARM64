@@ -32,10 +32,13 @@ jobs:
           docker run --rm -v "$PWD:/repo" -w /repo debian:bookworm bash -euc '
             apt-get update -qq
             DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-              cmake g++ git libsdl2-dev ninja-build pkg-config
+              ca-certificates curl cmake git libsdl2-dev ninja-build pkg-config
+            curl -fsSL https://apt.llvm.org/llvm.sh -o /tmp/llvm.sh
+            bash /tmp/llvm.sh 18
+            DEBIAN_FRONTEND=noninteractive apt-get install -y -qq clang-18
             cmake -S /repo/build-source -B /repo/build -G Ninja \
               -DOPENTS_PORTMASTER=ON \
-              -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
+              -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18 \
               -DCMAKE_BUILD_TYPE=Release
             cmake --build /repo/build --target OpenTS --parallel 2
             install -m 755 /repo/build/bin/Game /repo/dist/opents-a/Game
