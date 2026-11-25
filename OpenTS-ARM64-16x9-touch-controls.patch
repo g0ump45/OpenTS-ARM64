@@ -393,3 +393,47 @@ diff --git a/platform/portmaster/video.h b/platform/portmaster/video.h
  } PortMasterVideo;
  
  /* The caller initializes SDL and supplies a zero-initialized video object. */
+--- a/platform/portmaster/OpenTS-A.sh
++++ b/platform/portmaster/OpenTS-A.sh
+@@ -2,7 +2,7 @@
+ set -e
+ 
+ port_dir=$(cd -- "$(dirname -- "$0")" && pwd)
+-game_dir="$port_dir/opents-a"
++game_dir="$port_dir/opentsa"
+ cd "$game_dir"
+ exec >"$game_dir/opents.log" 2>&1
+ 
+@@ -24,7 +24,7 @@
+ shopt -s nullglob nocaseglob
+ archives=("$game_dir"/data/[t]ibsun.mix)
+ if (( ${#archives[@]} == 0 )) || [[ ! -r "${archives[0]}" ]]; then
+-    printf '%s\n' 'Extract your Tiberian Sun files into opents-a/data, with TIBSUN.MIX directly inside it.'
++    printf '%s\n' 'Extract your Tiberian Sun files into opentsa/data, with TIBSUN.MIX directly inside it.'
+     exit 1
+ fi
+ 
+--- a/platform/portmaster/README.md
++++ b/platform/portmaster/README.md
+@@ -65,16 +65,16 @@
+    shared libraries. Compare its logged glibc version with the binary
+    requirements printed by `readelf` in the workflow output.
+ 2. Download the **OpenTS-A-R36S-Test** workflow artifact and extract the inner
+-   `opents-a-r36s-test.zip` straight into the handheld's Ports directory.
+-   `OpenTS-A.sh` and the `opents-a` directory should be beside each other.
+-3. Extract your Tiberian Sun game files into `opents-a/data`, with
++   `opentsa-r36s-test.zip` straight into the handheld's Ports directory.
++   `OpenTS-A.sh` and the `opentsa` directory should be beside each other.
++3. Extract your Tiberian Sun game files into `opentsa/data`, with
+    `TIBSUN.MIX` directly inside that directory. The package contains only
+-   the engine. Settings and saves go under `opents-a/user`.
++   the engine. Settings and saves go under `opentsa/user`.
+ 4. Refresh Ports and launch **OpenTS-A**. Check that the menu appears. Move the
+    cursor with the left stick and D-pad, use A for left click, B for right
+    click and Start for Escape. On touchscreen devices, tap to click and drag
+    to move while holding the click. Assign **Place Ready Building** to a face
+    button under **Options > Controls** if wanted. Try starting a skirmish,
+    then quit through the main menu and check that the frontend returns.
+-5. Keep `opents-a/opents.log` and `opents-r36s-check/check.log`. Record the
++5. Keep `opentsa/opents.log` and `opents-r36s-check/check.log`. Record the
+    last screen reached and whether the cursor, buttons, audio and exit worked.

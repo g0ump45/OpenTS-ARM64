@@ -19,12 +19,12 @@ jobs:
       - name: Prepare the updated source and package layout
         run: |
           set -euo pipefail
-          mkdir -p build-source dist/opents-a/data
+          mkdir -p build-source dist/opentsa/data
           tar -xzf OpenTS-ARM-source.tar.gz --strip-components=1 -C build-source
           patch -d build-source -p1 < OpenTS-ARM64-16x9-touch-controls.patch
           cp build-source/platform/portmaster/OpenTS-A.sh dist/
           cp build-source/LICENSE.md build-source/THIRD_PARTY_NOTICES.md \
-            build-source/platform/portmaster/README.md dist/opents-a/
+            build-source/platform/portmaster/README.md dist/opentsa/
 
       - name: Compile the ARM64 game and check startup handling
         run: |
@@ -42,15 +42,17 @@ jobs:
               -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18 \
               -DCMAKE_BUILD_TYPE=Release
             cmake --build /repo/build --target OpenTS --parallel 2
-            install -m 755 /repo/build/bin/Game /repo/dist/opents-a/Game
-            if /repo/dist/opents-a/Game -DATADIR=/tmp/opents-missing-data > /tmp/startup.log 2>&1; then
+            install -m 755 /repo/build/bin/Game /repo/dist/opentsa/Game
+            if /repo/dist/opentsa/Game -DATADIR=/tmp/opents-missing-data > /tmp/startup.log 2>&1; then
               cat /tmp/startup.log
               exit 1
             fi
             grep -F "The data directory cannot be used" /tmp/startup.log
           '
-          readelf -h -l -d --version-info dist/opents-a/Game
-          (cd dist && zip -r ../OpenTS-ARM64-Widescreen-Touch-Update.zip OpenTS-A.sh opents-a)
+          readelf -h -l -d --version-info dist/opentsa/Game
+          (cd dist && zip -r ../OpenTS-ARM64-Widescreen-Touch-Update.zip OpenTS-A.sh opentsa)
+          tar -czf OpenTS-ARM-source-16x9-touch-controls.tar.gz -C build-source .
+          cp OpenTS-ARM64-16x9-touch-controls.patch OpenTS-ARM64-README.md .
 
       - name: Keep a build artifact for inspection
         uses: actions/upload-artifact@v4
@@ -59,7 +61,7 @@ jobs:
           path: OpenTS-ARM64-Widescreen-Touch-Update.zip
           if-no-files-found: error
 
-      - name: Attach the package to the GitHub draft
+      - name: Attach the corrected package and source to the GitHub draft
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -70,14 +72,14 @@ jobs:
             echo 'The expected review draft was not found; keeping the build as an Actions artifact.'
             exit 1
           fi
-          curl --fail-with-body --silent --show-error --location --request POST \
-            --header "Authorization: Bearer ${GH_TOKEN}" \
-            --header 'Accept: application/vnd.github+json' \
-            --header 'Content-Type: application/octet-stream' \
-            --data-binary @OpenTS-ARM64-Widescreen-Touch-Update.zip \
-            "https://uploads.github.com/repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets?name=OpenTS-ARM64-Widescreen-Touch-Update.zip"
+          for asset_name in OpenTS-ARM64-Widescreen-Touch-Update.zip OpenTS-ARM-source-16x9-touch-controls.tar.gz OpenTS-ARM64-16x9-touch-controls.patch OpenTS-ARM64-README.md; do
+            gh api "repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets" \
+              --jq ".[] | select(.name == \"${asset_name}\") | .id" | while read -r asset_id; do
+                [ -z "$asset_id" ] || gh api --method DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/${asset_id}" >/dev/null
+              done
+          done
           body=$(cat <<'BODY'
-          Draft for review — not public. The ARM64 package was built on GitHub's Ubuntu 24.04 ARM runner using Debian Bookworm dependencies. Its startup smoke check passed. It has not been tested on an RP6 or R36S device.
+          Draft for review — not public. The previous R36S test returned to the Ports menu because the new launcher and package used opents-a, while the established install folder is opentsa (without a hyphen). This corrected ARM64 build uses the existing opentsa/data path. The attached device log reported glibc 2.30; it did not show a runtime-library failure. The corrected build still needs to be retested on an R36S before publication.
 
           This update addresses the RP6 display and touchscreen feedback:
           - The game chooses a widescreen battlefield width for the device display while retaining its 480-pixel logical height.
@@ -85,7 +87,15 @@ jobs:
           - “Place Ready Building” is assignable in Options > Controls.
           - The Controls menu layout and ARM64 README are updated.
 
-          The ZIP is an installable ARM64 test build, but still needs device testing before publication. The attached source archive, patch, and README are included for review.
+          The corrected ARM64 ZIP, source snapshot, patch, and README are attached for review. This remains an unpublished draft.
           BODY
           )
           gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${release_id}" -f body="$body" >/dev/null
+          for asset in OpenTS-ARM64-Widescreen-Touch-Update.zip OpenTS-ARM-source-16x9-touch-controls.tar.gz OpenTS-ARM64-16x9-touch-controls.patch OpenTS-ARM64-README.md; do
+            curl --fail-with-body --silent --show-error --location --request POST \
+              --header "Authorization: Bearer ${GH_TOKEN}" \
+              --header 'Accept: application/vnd.github+json' \
+              --header 'Content-Type: application/octet-stream' \
+              --data-binary @"${asset}" \
+              "https://uploads.github.com/repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets?name=${asset}"
+          done
