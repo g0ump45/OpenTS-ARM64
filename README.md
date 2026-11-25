@@ -32,7 +32,8 @@ ports/opentsa/data/EXPAND01.MIX
 ports/opentsa/data/...
 ```
 
-**TIBSUN.MIX alone is not enough.** The launcher checks for it as a quick presence check; the game needs the other listed archives, including the Firestorm expansion files. Game files are not included with this port.
+Game files are not included. however this game has been release as freeware.
+https://cnc-comm.com/tiberian-sun/downloads/the-game/installer
 
 ## Controls
 
