@@ -470,7 +470,7 @@ diff --git a/code/portmaster_input.cpp b/code/portmaster_input.cpp
  				break;
  			}
 +			if (event.cbutton.button == SDL_CONTROLLER_BUTTON_START) {
-+				Keyboard->Put(event.type == SDL_CONTROLLERBUTTONDOWN ? KN_ESC : KN_ESC | KN_RLS_BIT);
++				Keyboard->Put(event.type == SDL_CONTROLLERBUTTONDOWN ? KN_ESC : KN_ESC | KN_RLSE_BIT);
 +				if (event.type == SDL_CONTROLLERBUTTONDOWN) DebugString("PortMaster: Start button mapped to Escape.\n");
 +				break;
 +			}
@@ -478,7 +478,15 @@ diff --git a/code/portmaster_input.cpp b/code/portmaster_input.cpp
 diff --git a/code/portmaster_video.cpp b/code/portmaster_video.cpp
 --- a/code/portmaster_video.cpp
 +++ b/code/portmaster_video.cpp
-@@ -36,7 +36,8 @@
+@@ -13,6 +13,7 @@
+ #include "_map.h"
+ #include "_convert.h"
+ #include "draw.h"
++#include "shapeset.h"
+ #include "mouse.h"
+ #include "dbgprint.h"
+ #include "dsurface.h"
+@@ -36,7 +37,8 @@
  VideoScaleInfo ScaleInfo{};
  bool FrameDirty = false;
  std::unique_ptr<DSurface> CursorSurface;
@@ -488,7 +496,7 @@ diff --git a/code/portmaster_video.cpp b/code/portmaster_video.cpp
  int ZoomLevel = 0;
  
  Rect Battlefield_Crop()
-@@ -218,36 +219,47 @@
+@@ -218,36 +220,47 @@
  		TacticalRect.Height * ScaleInfo.DestHeight / FrameHeight};
  	Presenter.destination = {ScaleInfo.DestX, ScaleInfo.DestY, ScaleInfo.DestWidth, ScaleInfo.DestHeight};
  	Presenter.cursor_visible = SDL_FALSE;
