@@ -465,67 +465,16 @@ diff --git a/platform/portmaster/video.h b/platform/portmaster/video.h
 diff --git a/code/portmaster_input.cpp b/code/portmaster_input.cpp
 --- a/code/portmaster_input.cpp
 +++ b/code/portmaster_input.cpp
-@@ -43,6 +43,7 @@
- int NameEntryLetter = 0;
- int NameEntryPendingKey = 0;
- SDL_FingerID ActiveFinger = -1;
-+bool StartCaptureRelease = false;
- 
- void Load_Controls()
- {
-@@ -308,8 +309,13 @@
- 				if (event.type == SDL_CONTROLLERBUTTONDOWN) {
- 					ControlButtons[CaptureAction] = event.cbutton.button;
- 					CapturedButton = event.cbutton.button;
-+					StartCaptureRelease = event.cbutton.button == SDL_CONTROLLER_BUTTON_START;
- 					CaptureAction = -1;
+@@ -332,4 +332,9 @@
  				}
-+				break;
-+			}
-+			if (StartCaptureRelease && event.cbutton.button == SDL_CONTROLLER_BUTTON_START) {
-+				if (event.type == SDL_CONTROLLERBUTTONUP) StartCaptureRelease = false;
  				break;
  			}
- 			if (NameEntryActive) {
-@@ -324,6 +330,11 @@
- 						case SDL_CONTROLLER_BUTTON_START: NameEntryPendingKey = KN_RETURN; break;
- 					}
- 				}
-+				break;
-+			}
 +			if (event.cbutton.button == SDL_CONTROLLER_BUTTON_START) {
 +				Keyboard->Put(event.type == SDL_CONTROLLERBUTTONDOWN ? KN_ESC : KN_ESC | KN_RLS_BIT);
 +				if (event.type == SDL_CONTROLLERBUTTONDOWN) DebugString("PortMaster: Start button mapped to Escape.\n");
- 				break;
- 			}
++				break;
++			}
  			if (event.cbutton.button == ControlButtons[PM_CONTROL_LEFT_CLICK]) {
-@@ -378,7 +389,7 @@
- 			break;
- 		case SDL_FINGERDOWN:
- 			if (ActiveFinger < 0) {
--				SDL_Window *window = SDL_GetWindowFromID(event.tfinger.windowID);
-+				SDL_Window *window = SDL_GetKeyboardFocus();
- 				if (!window) window = SDL_GetMouseFocus();
- 				int window_width = 0, window_height = 0;
- 				if (window) SDL_GetWindowSize(window, &window_width, &window_height);
-@@ -391,7 +402,7 @@
- 			break;
- 		case SDL_FINGERMOTION:
- 			if (ActiveFinger == event.tfinger.fingerId) {
--				SDL_Window *window = SDL_GetWindowFromID(event.tfinger.windowID);
-+				SDL_Window *window = SDL_GetKeyboardFocus();
- 				if (!window) window = SDL_GetMouseFocus();
- 				int window_width = 0, window_height = 0;
- 				if (window) SDL_GetWindowSize(window, &window_width, &window_height);
-@@ -401,7 +412,7 @@
- 			break;
- 		case SDL_FINGERUP:
- 			if (ActiveFinger == event.tfinger.fingerId) {
--				SDL_Window *window = SDL_GetWindowFromID(event.tfinger.windowID);
-+				SDL_Window *window = SDL_GetKeyboardFocus();
- 				if (!window) window = SDL_GetMouseFocus();
- 				int window_width = 0, window_height = 0;
- 				if (window) SDL_GetWindowSize(window, &window_width, &window_height);
 diff --git a/code/portmaster_video.cpp b/code/portmaster_video.cpp
 --- a/code/portmaster_video.cpp
 +++ b/code/portmaster_video.cpp
