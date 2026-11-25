@@ -7,7 +7,7 @@ This build brings the OpenTS-A game engine and handheld controls to PortMaster-c
 ## Install
 
 1. Use an **ARM64 Linux handheld** with glibc 2.34 or newer and firmware-provided SDL2.
-2. Download **[OpenTS-ARM-R36S-Verified.zip](https://github.com/g0ump45/OpenTS-ARM/releases/download/v0.1.0-portmaster-test.1/OpenTS-ARM-R36S-Verified.zip)** from the [release page](https://github.com/g0ump45/OpenTS-ARM/releases/latest).
+2. Download **[OpenTS-ARM-R36S-Verified.zip](https://github.com/g0ump45/OpenTS-ARM/releases/download/v0.1.0-r36s.1/OpenTS-ARM-R36S-Verified.zip)** from the [release page](https://github.com/g0ump45/OpenTS-ARM/releases/tag/v0.1.0-r36s.1).
 3. Extract the ZIP contents into your device's `ports/` folder. Keep `OpenTS-A.sh` and the `opentsa/` folder together.
 4. Copy the contents of your Steam **Command & Conquer: Tiberian Sun and Firestorm** install folder into `ports/opentsa/data/`, keeping the game-data files together.
 
@@ -32,8 +32,7 @@ ports/opentsa/data/EXPAND01.MIX
 ports/opentsa/data/...
 ```
 
-Game files are not included. however this game has been release as freeware.
-https://cnc-comm.com/tiberian-sun/downloads/the-game/installer
+Game data is not included. Electronic Arts released Tiberian Sun as freeware; the [C&C Communications Center installer](https://cnc-comm.com/tiberian-sun/downloads/the-game/installer) installs Tiberian Sun and Firestorm. C&C Communications Center is an unofficial fan site.
 
 ## Controls
 
@@ -45,7 +44,7 @@ Confirmed working on an **R36S Clone running ArkOS4Clone-20261008**. Other handh
 
 ## Source code
 
-The source snapshot is available as **[OpenTS-ARM-source.tar.gz](https://github.com/g0ump45/OpenTS-ARM/releases/download/v0.1.0-portmaster-test.1/OpenTS-ARM-source.tar.gz)**.
+The source snapshot is available as **[OpenTS-ARM-source.tar.gz](https://github.com/g0ump45/OpenTS-ARM/releases/download/v0.1.0-r36s.1/OpenTS-ARM-source.tar.gz)**.
 
 ## Support
 
