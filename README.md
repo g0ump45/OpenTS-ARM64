@@ -1,4 +1,4 @@
-# OpenTS-A
+# OpenTS-ARM
 
 An ARM64 Linux handheld port of [OpenTS](https://github.com/OpenTS-Developers/OpenTS), maintained by **GEARS0FUMP45**, for Command & Conquer: Tiberian Sun and Firestorm.
 
