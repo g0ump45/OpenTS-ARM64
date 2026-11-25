@@ -6,6 +6,10 @@ Experimental ARM64 PortMaster port of OpenTS-A, the Tiberian Sun engine.
 
 Download **[OpenTS-ARM-PortMaster-candidate.zip](./OpenTS-ARM-PortMaster-candidate.zip)**. It contains the PortMaster launcher, game executable, source archive, metadata, and license files.
 
+## Source code
+
+The source snapshot is also available separately as **[OpenTS-ARM-source.tar.gz](./OpenTS-ARM-source.tar.gz)**. Extract it to access the full source tree.
+
 ## Requirements and game files
 
 - ARM64 Linux handheld with glibc 2.34 or newer.
@@ -16,4 +20,4 @@ Download **[OpenTS-ARM-PortMaster-candidate.zip](./OpenTS-ARM-PortMaster-candida
 
 The package build, archive integrity, launcher syntax, and PortMaster metadata checks passed. Direct R36S testing and the broader firmware compatibility matrix are still pending. The included screenshot is a temporary candidate image; replace it with a capture from the target device before submitting to the PortMaster catalogue.
 
-This repository is a private development/test repository, not an official PortMaster release.
+This repository is private and intended for development and testing. This candidate is not an official PortMaster release.
