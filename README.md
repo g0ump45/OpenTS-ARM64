@@ -18,6 +18,5 @@ The source snapshot is also available separately as **[OpenTS-ARM-source.tar.gz]
 
 ## Status
 
-The package build, archive integrity, launcher syntax, and PortMaster metadata checks passed. Direct R36S testing and the broader firmware compatibility matrix are still pending. The included screenshot is a temporary candidate image; replace it with a capture from the target device before submitting to the PortMaster catalogue.
-
+The package build, archive integrity, launcher syntax, and PortMaster metadata checks passed. Direct R36S testing and the broader firmware compatibility matrix are still pending.
 This repository is private and intended for development and testing. This candidate is not an official PortMaster release.
