@@ -32,9 +32,10 @@ jobs:
           docker run --rm -v "$PWD:/repo" -w /repo debian:bookworm bash -euc '
             apt-get update -qq
             DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-              ca-certificates curl cmake git libsdl2-dev ninja-build pkg-config
-            curl -fsSL https://apt.llvm.org/llvm.sh -o /tmp/llvm.sh
-            bash /tmp/llvm.sh 18
+              ca-certificates curl cmake git gnupg lsb-release libsdl2-dev ninja-build pkg-config
+            curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm.gpg
+            echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] https://apt.llvm.org/bookworm/ llvm-toolchain-bookworm-18 main" > /etc/apt/sources.list.d/llvm.list
+            apt-get update -qq
             DEBIAN_FRONTEND=noninteractive apt-get install -y -qq clang-18
             cmake -S /repo/build-source -B /repo/build -G Ninja \
               -DOPENTS_PORTMASTER=ON \
