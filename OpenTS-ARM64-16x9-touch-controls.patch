@@ -462,3 +462,235 @@ diff --git a/platform/portmaster/video.h b/platform/portmaster/video.h
      return;
  #else
      // Original AI animates mouse - skip if needed
+diff --git a/code/portmaster_input.cpp b/code/portmaster_input.cpp
+--- a/code/portmaster_input.cpp
++++ b/code/portmaster_input.cpp
+@@ -43,6 +43,7 @@
+ int NameEntryLetter = 0;
+ int NameEntryPendingKey = 0;
+ SDL_FingerID ActiveFinger = -1;
++bool StartCaptureRelease = false;
+ 
+ void Load_Controls()
+ {
+@@ -308,8 +309,13 @@
+ 				if (event.type == SDL_CONTROLLERBUTTONDOWN) {
+ 					ControlButtons[CaptureAction] = event.cbutton.button;
+ 					CapturedButton = event.cbutton.button;
++					StartCaptureRelease = event.cbutton.button == SDL_CONTROLLER_BUTTON_START;
+ 					CaptureAction = -1;
+ 				}
++				break;
++			}
++			if (StartCaptureRelease && event.cbutton.button == SDL_CONTROLLER_BUTTON_START) {
++				if (event.type == SDL_CONTROLLERBUTTONUP) StartCaptureRelease = false;
+ 				break;
+ 			}
+ 			if (NameEntryActive) {
+@@ -324,6 +330,11 @@
+ 						case SDL_CONTROLLER_BUTTON_START: NameEntryPendingKey = KN_RETURN; break;
+ 					}
+ 				}
++				break;
++			}
++			if (event.cbutton.button == SDL_CONTROLLER_BUTTON_START) {
++				Keyboard->Put(event.type == SDL_CONTROLLERBUTTONDOWN ? KN_ESC : KN_ESC | KN_RLS_BIT);
++				if (event.type == SDL_CONTROLLERBUTTONDOWN) DebugString("PortMaster: Start button mapped to Escape.\n");
+ 				break;
+ 			}
+ 			if (event.cbutton.button == ControlButtons[PM_CONTROL_LEFT_CLICK]) {
+@@ -378,7 +389,7 @@
+ 			break;
+ 		case SDL_FINGERDOWN:
+ 			if (ActiveFinger < 0) {
+-				SDL_Window *window = SDL_GetWindowFromID(event.tfinger.windowID);
++				SDL_Window *window = SDL_GetKeyboardFocus();
+ 				if (!window) window = SDL_GetMouseFocus();
+ 				int window_width = 0, window_height = 0;
+ 				if (window) SDL_GetWindowSize(window, &window_width, &window_height);
+@@ -391,7 +402,7 @@
+ 			break;
+ 		case SDL_FINGERMOTION:
+ 			if (ActiveFinger == event.tfinger.fingerId) {
+-				SDL_Window *window = SDL_GetWindowFromID(event.tfinger.windowID);
++				SDL_Window *window = SDL_GetKeyboardFocus();
+ 				if (!window) window = SDL_GetMouseFocus();
+ 				int window_width = 0, window_height = 0;
+ 				if (window) SDL_GetWindowSize(window, &window_width, &window_height);
+@@ -401,7 +412,7 @@
+ 			break;
+ 		case SDL_FINGERUP:
+ 			if (ActiveFinger == event.tfinger.fingerId) {
+-				SDL_Window *window = SDL_GetWindowFromID(event.tfinger.windowID);
++				SDL_Window *window = SDL_GetKeyboardFocus();
+ 				if (!window) window = SDL_GetMouseFocus();
+ 				int window_width = 0, window_height = 0;
+ 				if (window) SDL_GetWindowSize(window, &window_width, &window_height);
+diff --git a/code/portmaster_video.cpp b/code/portmaster_video.cpp
+--- a/code/portmaster_video.cpp
++++ b/code/portmaster_video.cpp
+@@ -36,7 +36,8 @@
+ VideoScaleInfo ScaleInfo{};
+ bool FrameDirty = false;
+ std::unique_ptr<DSurface> CursorSurface;
+-std::vector<uint16_t> CursorFrame;
++std::vector<uint8_t> CursorFrameRGBA;
++SDL_Rect CursorOverlayRect{};
+ int ZoomLevel = 0;
+ 
+ Rect Battlefield_Crop()
+@@ -218,36 +219,47 @@
+ 		TacticalRect.Height * ScaleInfo.DestHeight / FrameHeight};
+ 	Presenter.destination = {ScaleInfo.DestX, ScaleInfo.DestY, ScaleInfo.DestWidth, ScaleInfo.DestHeight};
+ 	Presenter.cursor_visible = SDL_FALSE;
+-	void const *frame_pixels = surface->Get_Buffer();
+-	int frame_pitch = surface->Stride();
+-	if (Keyboard) {
+-		Point2D const cursor = PortMaster_Pointer_To_Frame(Keyboard->Get_Mouse_Position());
+-		Presenter.cursor = {cursor.X, cursor.Y};
+-		if (MouseClass::MouseShapes && MouseDrawer) {
+-			if (!CursorSurface) CursorSurface = std::make_unique<DSurface>(FrameWidth, FrameHeight);
++	void const *cursor_rgba = nullptr;
++	int cursor_pitch = 0;
++	SDL_Rect const *cursor_rect = nullptr;
++	if (Keyboard && MouseClass::MouseShapes && MouseDrawer) {
++		int const frame = Map.PortMaster_Current_Cursor_Frame();
++		Rect const shape = MouseClass::MouseShapes->Get_Rect(frame);
++		if (shape.Is_Valid()) {
++			Point2D const cursor = PortMaster_Pointer_To_Frame(Keyboard->Get_Mouse_Position());
++			Presenter.cursor = {cursor.X, cursor.Y};
++			if (!CursorSurface || CursorSurface->Get_Width() != shape.Width || CursorSurface->Get_Height() != shape.Height)
++				CursorSurface = std::make_unique<DSurface>(shape.Width, shape.Height);
+ 			CursorSurface->Fill(0);
+ 			Point2D const hotspot = Map.PortMaster_Current_Cursor_Hotspot();
+-			Draw_Shape(*CursorSurface, *MouseDrawer, MouseClass::MouseShapes,
+-				Map.PortMaster_Current_Cursor_Frame(), Point2D(cursor.X - hotspot.X, cursor.Y - hotspot.Y),
+-				CursorSurface->Get_Rect());
+-			CursorFrame.resize(FrameWidth * FrameHeight);
+-			auto const *source = static_cast<uint16_t const *>(surface->Get_Buffer());
++			Draw_Shape(*CursorSurface, *MouseDrawer, MouseClass::MouseShapes, frame,
++				Point2D(-shape.X, -shape.Y), CursorSurface->Get_Rect());
++			CursorFrameRGBA.resize(static_cast<size_t>(shape.Width) * shape.Height * 4);
+ 			auto const *cursor_data = static_cast<uint16_t const *>(CursorSurface->Get_Buffer());
+-			int const source_stride = surface->Stride() / 2;
+ 			int const cursor_stride = CursorSurface->Stride() / 2;
+-			for (int y = 0; y < FrameHeight; ++y) {
+-				uint16_t *row = CursorFrame.data() + y * FrameWidth;
+-				for (int x = 0; x < FrameWidth; ++x) {
++			for (int y = 0; y < shape.Height; ++y) {
++				for (int x = 0; x < shape.Width; ++x) {
+ 					uint16_t const pixel = cursor_data[y * cursor_stride + x];
+-					row[x] = pixel ? pixel : source[y * source_stride + x];
++					uint8_t *rgba = CursorFrameRGBA.data() + (static_cast<size_t>(y) * shape.Width + x) * 4;
++					uint8_t const red5 = static_cast<uint8_t>((pixel >> 11) & 0x1f);
++					uint8_t const green6 = static_cast<uint8_t>((pixel >> 5) & 0x3f);
++					uint8_t const blue5 = static_cast<uint8_t>(pixel & 0x1f);
++					rgba[0] = static_cast<uint8_t>((red5 << 3) | (red5 >> 2));
++					rgba[1] = static_cast<uint8_t>((green6 << 2) | (green6 >> 4));
++					rgba[2] = static_cast<uint8_t>((blue5 << 3) | (blue5 >> 2));
++					rgba[3] = pixel ? 255 : 0;
+ 				}
+ 			}
+-			frame_pixels = CursorFrame.data();
+-			frame_pitch = FrameWidth * 2;
++			CursorOverlayRect = {cursor.X - hotspot.X + shape.X, cursor.Y - hotspot.Y + shape.Y,
++				shape.Width, shape.Height};
++			cursor_rgba = CursorFrameRGBA.data();
++			cursor_pitch = shape.Width * 4;
++			cursor_rect = &CursorOverlayRect;
+ 		}
+ 	}
+ 
+-	if (PortMaster_PresentFrame(&Presenter, frame_pixels, frame_pitch) == 0) {
++	if (PortMaster_PresentFrameWithCursor(&Presenter, surface->Get_Buffer(), surface->Stride(),
++		cursor_rgba, cursor_pitch, cursor_rect) == 0) {
+ 		Uint32 const now = SDL_GetTicks();
+ 		Record_Frame_Timing(now);
+ 		LastPresent = now;
+diff --git a/platform/portmaster/video.c b/platform/portmaster/video.c
+--- a/platform/portmaster/video.c
++++ b/platform/portmaster/video.c
+@@ -32,12 +32,32 @@
+     return 0;
+ }
+ 
+-int PortMaster_PresentFrame(const PortMasterVideo *video, const void *pixels, int pitch)
++int PortMaster_PresentFrame(PortMasterVideo *video, const void *pixels, int pitch)
+ {
+-    if (!video->texture || !pixels || pitch < video->width * 2) {
+-        return SDL_SetError("Invalid RGB565 frame");
++    return PortMaster_PresentFrameWithCursor(video, pixels, pitch, NULL, 0, NULL);
++}
++
++int PortMaster_PresentFrameWithCursor(PortMasterVideo *video, const void *pixels, int pitch,
++    const void *cursor_rgba, int cursor_pitch, const SDL_Rect *cursor_rect)
++{
++    if (!video->texture || !pixels || pitch < video->width * 2 ||
++        (cursor_rgba && (!cursor_rect || cursor_rect->w <= 0 || cursor_rect->h <= 0 ||
++            cursor_pitch < cursor_rect->w * 4))) {
++        return SDL_SetError("Invalid RGB565 frame or RGBA cursor");
++    }
++    if (cursor_rgba && (!video->cursor_texture || video->cursor_texture_width != cursor_rect->w ||
++        video->cursor_texture_height != cursor_rect->h)) {
++        if (video->cursor_texture) SDL_DestroyTexture(video->cursor_texture);
++        video->cursor_texture = SDL_CreateTexture(video->renderer, SDL_PIXELFORMAT_RGBA32,
++            SDL_TEXTUREACCESS_STREAMING, cursor_rect->w, cursor_rect->h);
++        video->cursor_texture_width = cursor_rect->w;
++        video->cursor_texture_height = cursor_rect->h;
++        if (!video->cursor_texture || SDL_SetTextureBlendMode(video->cursor_texture, SDL_BLENDMODE_BLEND) != 0) {
++            return -1;
++        }
+     }
+     if (SDL_UpdateTexture(video->texture, NULL, pixels, pitch) != 0 ||
++        (cursor_rgba && SDL_UpdateTexture(video->cursor_texture, NULL, cursor_rgba, cursor_pitch) != 0) ||
+         SDL_RenderClear(video->renderer) != 0 ||
+         SDL_RenderCopy(video->renderer, video->texture, NULL,
+             video->destination.w > 0 && video->destination.h > 0 ? &video->destination : NULL) != 0) {
+@@ -47,12 +67,23 @@
+         SDL_RenderCopy(video->renderer, video->texture, &video->zoom_source, &video->zoom_destination) != 0) {
+         return -1;
+     }
++    if (cursor_rgba) {
++        SDL_Rect cursor_destination = {
++            video->destination.x + cursor_rect->x * video->destination.w / video->width,
++            video->destination.y + cursor_rect->y * video->destination.h / video->height,
++            SDL_max(1, cursor_rect->w * video->destination.w / video->width),
++            SDL_max(1, cursor_rect->h * video->destination.h / video->height)};
++        if (SDL_RenderCopy(video->renderer, video->cursor_texture, NULL, &cursor_destination) != 0) {
++            return -1;
++        }
++    }
+     SDL_RenderPresent(video->renderer);
+     return 0;
+ }
+ 
+ void PortMaster_CloseVideo(PortMasterVideo *video)
+ {
++    if (video->cursor_texture) SDL_DestroyTexture(video->cursor_texture);
+     if (video->texture) SDL_DestroyTexture(video->texture);
+     if (video->renderer) SDL_DestroyRenderer(video->renderer);
+     if (video->window) SDL_DestroyWindow(video->window);
+diff --git a/platform/portmaster/video.h b/platform/portmaster/video.h
+--- a/platform/portmaster/video.h
++++ b/platform/portmaster/video.h
+@@ -11,6 +11,9 @@
+     SDL_Window *window;
+     SDL_Renderer *renderer;
+     SDL_Texture *texture;
++    SDL_Texture *cursor_texture;
++    int cursor_texture_width;
++    int cursor_texture_height;
+     int width;
+     int height;
+     SDL_bool cursor_visible;
+@@ -22,7 +25,9 @@
+ 
+ /* The caller initializes SDL and supplies a zero-initialized video object. */
+ int PortMaster_OpenVideo(PortMasterVideo *video, const char *title, int width, int height);
+-int PortMaster_PresentFrame(const PortMasterVideo *video, const void *pixels, int pitch);
++int PortMaster_PresentFrame(PortMasterVideo *video, const void *pixels, int pitch);
++int PortMaster_PresentFrameWithCursor(PortMasterVideo *video, const void *pixels, int pitch,
++    const void *cursor_rgba, int cursor_pitch, const SDL_Rect *cursor_rect);
+ void PortMaster_CloseVideo(PortMasterVideo *video);
+ 
+ #ifdef __cplusplus

@@ -38,7 +38,7 @@ Game data is not included. Electronic Arts released Tiberian Sun as freeware; th
 
 The game cursor uses its original animated shape frames. Configure button assignments and cursor speed in the in-game **Options > Controls** menu. The default mapping uses the D-pad and left stick to move the cursor, **A** to select, **B** to cancel or right-click, and **Select** for the on-screen groups and base controls.
 
-The game adapts its battlefield width to the device display at launch: it keeps a 480-pixel frame height and uses a wider playfield on widescreen devices. No resolution file edit is needed. Touch input supports tap and drag, and **Place Ready Building** can be assigned to Y/Square, Triangle or another controller button in **Options > Controls**.
+The game adapts its battlefield width to the device display at launch: it keeps a 480-pixel frame height and uses a wider playfield on widescreen devices. No resolution file edit is needed. Touch input supports tap and drag, and **Place Ready Building** can be assigned to Y/Square, Triangle or another controller button in **Options > Controls**. When zoomed, the original cursor stays at its normal size and remains aligned with the drag-selection box.
 
 ## Tested device
 
