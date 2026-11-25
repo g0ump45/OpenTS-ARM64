@@ -404,7 +404,7 @@ diff --git a/platform/portmaster/video.h b/platform/portmaster/video.h
  cd "$game_dir"
  exec >"$game_dir/opents.log" 2>&1
  
-@@ -24,7 +24,7 @@
+@@ -24,9 +24,10 @@
  shopt -s nullglob nocaseglob
  archives=("$game_dir"/data/[t]ibsun.mix)
  if (( ${#archives[@]} == 0 )) || [[ ! -r "${archives[0]}" ]]; then
@@ -413,11 +413,21 @@ diff --git a/platform/portmaster/video.h b/platform/portmaster/video.h
      exit 1
  fi
  
+ mkdir -p "$game_dir/user"
++export LD_LIBRARY_PATH="$game_dir/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+ exec "$game_dir/Game" "-DATADIR=$game_dir/data" "-USERDIR=$game_dir/user"
 --- a/platform/portmaster/README.md
 +++ b/platform/portmaster/README.md
-@@ -65,16 +65,16 @@
-    shared libraries. Compare its logged glibc version with the binary
-    requirements printed by `readelf` in the workflow output.
+@@ -60,21 +60,19 @@
+ ## Test the engine on dArkOSRE
+ 
+ 1. Run **OpenTS R36S Check** first and keep its log. The experimental engine
+-   workflow packages a 64-bit ARM build using Debian Bookworm (glibc 2.36).
+-   The target firmware needs compatible versions of glibc, SDL2 and the other
+-   shared libraries. Compare its logged glibc version with the binary
+-   requirements printed by `readelf` in the workflow output.
++   workflow packages a 64-bit ARM build using Debian Buster (glibc 2.28).
++   The package includes the LLVM C++ runtime. The target firmware supplies SDL2 and glibc; the ARM64 binary is built against glibc 2.28 to support older handheld firmware.
  2. Download the **OpenTS-A-R36S-Test** workflow artifact and extract the inner
 -   `opents-a-r36s-test.zip` straight into the handheld's Ports directory.
 -   `OpenTS-A.sh` and the `opents-a` directory should be beside each other.

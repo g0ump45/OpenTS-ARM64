@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/arm64-review-build.yml'
       - 'OpenTS-ARM64-16x9-touch-controls.patch'
+      - 'OpenTS-ARM64-README.md'
 
 permissions:
   contents: write
@@ -19,30 +20,47 @@ jobs:
       - name: Prepare the updated source and package layout
         run: |
           set -euo pipefail
-          mkdir -p build-source dist/opentsa/data
+          mkdir -p build-source dist/opentsa/data dist/opentsa/lib
           tar -xzf OpenTS-ARM-source.tar.gz --strip-components=1 -C build-source
           patch -d build-source -p1 < OpenTS-ARM64-16x9-touch-controls.patch
           cp build-source/platform/portmaster/OpenTS-A.sh dist/
           cp build-source/LICENSE.md build-source/THIRD_PARTY_NOTICES.md \
             build-source/platform/portmaster/README.md dist/opentsa/
 
-      - name: Compile the ARM64 game and check startup handling
+      - name: Compile for the R36S glibc baseline and check startup handling
         run: |
           set -euo pipefail
-          docker run --rm -v "$PWD:/repo" -w /repo debian:bookworm bash -euc '
-            apt-get update -qq
+          docker run --rm -v "$PWD:/repo" -w /repo debian:buster bash -euc '
+            cat > /etc/apt/sources.list <<"SOURCES"
+            deb [check-valid-until=no] http://archive.debian.org/debian buster main
+            deb [check-valid-until=no] http://archive.debian.org/debian-security buster/updates main
+            SOURCES
+            apt-get -o Acquire::Check-Valid-Until=false update -qq
             DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-              ca-certificates curl cmake git gnupg lsb-release libsdl2-dev ninja-build pkg-config
+              ca-certificates curl gnupg python3-pip libsdl2-dev ninja-build pkg-config
             curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm.gpg
-            echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] https://apt.llvm.org/bookworm/ llvm-toolchain-bookworm-18 main" > /etc/apt/sources.list.d/llvm.list
+            echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] https://apt.llvm.org/buster/ llvm-toolchain-buster-18 main" > /etc/apt/sources.list.d/llvm.list
             apt-get update -qq
-            DEBIAN_FRONTEND=noninteractive apt-get install -y -qq clang-18
+            DEBIAN_FRONTEND=noninteractive apt-get install -y -qq clang-18 libc++-18-dev libc++abi-18-dev libunwind-18-dev
+            python3 -m pip install --user cmake==3.23.5
+            export PATH="/root/.local/bin:$PATH"
             cmake -S /repo/build-source -B /repo/build -G Ninja \
               -DOPENTS_PORTMASTER=ON \
               -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18 \
+              -DCMAKE_CXX_FLAGS=-stdlib=libc++ \
+              -DCMAKE_EXE_LINKER_FLAGS=-stdlib=libc++ \
               -DCMAKE_BUILD_TYPE=Release
             cmake --build /repo/build --target OpenTS --parallel 2
             install -m 755 /repo/build/bin/Game /repo/dist/opentsa/Game
+            for library in libc++.so.1 libc++abi.so.1 libunwind.so.1; do
+              library_path=$(ldconfig -p | grep -m1 " $library " | cut -d \> -f2 | xargs)
+              test -n "$library_path"
+              cp -L "$library_path" "/repo/dist/opentsa/lib/$library"
+            done
+            : > /repo/dist/opentsa/lib/LLVM-RUNTIME-LICENSES.txt
+            for license in /usr/share/doc/libc++1-18/copyright /usr/share/doc/libc++abi1-18/copyright /usr/share/doc/libunwind-18/copyright; do
+              if [ -r "$license" ]; then cat "$license" >> /repo/dist/opentsa/lib/LLVM-RUNTIME-LICENSES.txt; printf "\n" >> /repo/dist/opentsa/lib/LLVM-RUNTIME-LICENSES.txt; fi
+            done
             if /repo/dist/opentsa/Game -DATADIR=/tmp/opents-missing-data > /tmp/startup.log 2>&1; then
               cat /tmp/startup.log
               exit 1
@@ -50,9 +68,10 @@ jobs:
             grep -F "The data directory cannot be used" /tmp/startup.log
           '
           readelf -h -l -d --version-info dist/opentsa/Game
+          max_glibc=$(readelf --version-info dist/opentsa/Game | grep -oE 'GLIBC_[0-9]+\.[0-9]+' | sort -Vu | tail -n 1)
+          test "$(printf '%s\n' "$max_glibc" GLIBC_2.30 | sort -V | tail -n 1)" = GLIBC_2.30
           (cd dist && zip -r ../OpenTS-ARM64-Widescreen-Touch-Update.zip OpenTS-A.sh opentsa)
           tar -czf OpenTS-ARM-source-16x9-touch-controls.tar.gz -C build-source .
-          cp OpenTS-ARM64-16x9-touch-controls.patch .
 
       - name: Keep a build artifact for inspection
         uses: actions/upload-artifact@v4
@@ -72,14 +91,14 @@ jobs:
             echo 'The expected review draft was not found; keeping the build as an Actions artifact.'
             exit 1
           fi
-          for asset_name in OpenTS-ARM64-Widescreen-Touch-Update.zip OpenTS-ARM-source-16x9-touch-controls.tar.gz OpenTS-ARM64-16x9-touch-controls.patch; do
+          for asset_name in OpenTS-ARM64-Widescreen-Touch-Update.zip OpenTS-ARM-source-16x9-touch-controls.tar.gz OpenTS-ARM64-16x9-touch-controls.patch OpenTS-ARM64-README.md; do
             gh api "repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets" \
               --jq ".[] | select(.name == \"${asset_name}\") | .id" | while read -r asset_id; do
                 [ -z "$asset_id" ] || gh api --method DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/${asset_id}" >/dev/null
               done
           done
           body=$(cat <<'BODY'
-          Draft for review — not public. The previous R36S test returned to the Ports menu because the new launcher and package used opents-a, while the established install folder is opentsa (without a hyphen). This corrected ARM64 build uses the existing opentsa/data path. The attached device log reported glibc 2.30; it did not show a runtime-library failure. The corrected build still needs to be retested on an R36S before publication.
+          Draft for review — not public. The previous R36S test returned to Ports because the new launcher expected opents-a. The established install folder is opentsa (without a hyphen); this package now uses opentsa/data. The earlier binary also required glibc 2.34 while the R36S reports 2.30. This build targets glibc 2.28 and bundles its LLVM C++ runtime. Device retesting on the R36S is still required before publication.
 
           This update addresses the RP6 display and touchscreen feedback:
           - The game chooses a widescreen battlefield width for the device display while retaining its 480-pixel logical height.
@@ -87,11 +106,11 @@ jobs:
           - “Place Ready Building” is assignable in Options > Controls.
           - The Controls menu layout and ARM64 README are updated.
 
-          The corrected ARM64 ZIP, source snapshot, patch, and README are attached for review. This remains an unpublished draft.
+          The rebuilt ARM64 ZIP, source snapshot, patch, and README are attached for review. This remains an unpublished draft.
           BODY
           )
           gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${release_id}" -f body="$body" >/dev/null
-          for asset in OpenTS-ARM64-Widescreen-Touch-Update.zip OpenTS-ARM-source-16x9-touch-controls.tar.gz OpenTS-ARM64-16x9-touch-controls.patch; do
+          for asset in OpenTS-ARM64-Widescreen-Touch-Update.zip OpenTS-ARM-source-16x9-touch-controls.tar.gz OpenTS-ARM64-16x9-touch-controls.patch OpenTS-ARM64-README.md; do
             curl --fail-with-body --silent --show-error --location --request POST \
               --header "Authorization: Bearer ${GH_TOKEN}" \
               --header 'Accept: application/vnd.github+json' \
