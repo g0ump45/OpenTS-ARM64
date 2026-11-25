@@ -447,3 +447,18 @@ diff --git a/platform/portmaster/video.h b/platform/portmaster/video.h
 -5. Keep `opents-a/opents.log` and `opents-r36s-check/check.log`. Record the
 +5. Keep `opentsa/opents.log` and `opents-r36s-check/check.log`. Record the
     last screen reached and whether the cursor, buttons, audio and exit worked.
+--- a/code/mouse.cpp
++++ b/code/mouse.cpp
+@@ -177,6 +177,12 @@
+ {
+ #if defined(__ANDROID__) || defined(OPENTS_PORTMASTER)
+     BASECLASS::AI(input, xy);
++    MouseStruct const * control = &MouseControl[CurrentMouseShape];
++    if (MouseShapes && control->FrameRate && Timer == 0) {
++        Frame = (Frame + 1) % control->FrameCount;
++        Timer = control->FrameRate;
++        Override_Mouse_Shape(CurrentMouseShape, IsSmall);
++    }
+     return;
+ #else
+     // Original AI animates mouse - skip if needed

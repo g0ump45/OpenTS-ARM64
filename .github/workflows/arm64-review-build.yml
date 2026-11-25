@@ -123,6 +123,7 @@ jobs:
           - Touch taps and drags are mapped into game coordinates.
           - “Place Ready Building” is assignable in Options > Controls.
           - The Controls menu layout and ARM64 README are updated.
+          - Original animated mouse-pointer frames now advance at their configured game rates.
 
           The rebuilt ARM64 ZIP, source snapshot, patch, and README are attached for review. This remains an unpublished draft.
           BODY
