@@ -7,7 +7,7 @@ This build brings the OpenTS-A game engine and handheld controls to PortMaster-c
 ## Install
 
 1. Use an **ARM64 Linux handheld** with glibc 2.30 or newer and firmware-provided SDL2.
-2. Download **[OpenTS-ARM-R36S-Verified.zip](https://github.com/g0ump45/OpenTS-ARM64/releases/download/v0.1.0-r36s.1/OpenTS-ARM-R36S-Verified.zip)** from the [release page](https://github.com/g0ump45/OpenTS-ARM64/releases/tag/v0.1.0-r36s.1).
+2. Download **[OpenTS-ARM-R36S-Verified.zip](https://github.com/g0ump45/OpenTS-ARM64/releases/download/v0.2.0/OpenTS-ARM64-Widescreen-Touch-Update.zip)** from the [release page](https://github.com/g0ump45/OpenTS-ARM64/releases/tag/v0.2.0).
 3. Extract the ZIP contents into your device's `ports/` folder. Keep `OpenTS-A.sh` and the `opentsa/` folder together.
 4. Copy the contents of your Steam **Command & Conquer: Tiberian Sun and Firestorm** install folder into `ports/opentsa/data/`, keeping the game-data files together.
 
@@ -38,7 +38,7 @@ Game data is not included. Electronic Arts released Tiberian Sun as freeware; th
 
 The game uses its original cursor shapes and animated frames. Configure button assignments and cursor speed in the in-game **Options > Controls** menu. The default mapping uses the D-pad and left stick to move the cursor, **A** to select, **B** to cancel or right-click, **Start** to open the in-game options, and **Select** for the on-screen groups and base controls. Physical buttons that the device does not expose through SDL's standard controller mapping can still be assigned from the Controls menu.
 
-The game adapts its battlefield width to the device display at launch: it keeps a 480-pixel frame height and uses a wider playfield on widescreen devices. No resolution file edit is needed. Touch input supports tap and drag, and **Place Ready Building** can be assigned to Y/Square, Triangle or another controller button in **Options > Controls**. When zoomed, the original cursor stays at its normal size and remains aligned with the drag-selection box.
+At launch, the game requests fullscreen, detects the display’s drawable size, adapts its battlefield width to the screen ratio, and scales the complete frame to fit while preserving the game’s proportions. Very tall or portrait displays may show bars; use landscape orientation where possible. No resolution file edit is needed. Touch input supports tap and drag, and **Place Ready Building** can be assigned to Y/Square, Triangle or another controller button in **Options > Controls**. When zoomed, the original cursor stays at its normal size and remains aligned with the drag-selection box.
 
 ## Tested device
 
