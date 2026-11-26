@@ -90,14 +90,14 @@ jobs:
           readelf -h -l -d --version-info dist/opentsa/Game
           max_glibc=$(readelf --version-info dist/opentsa/Game | grep -oE 'GLIBC_[0-9]+\.[0-9]+' | sort -Vu | tail -n 1)
           test "$(printf '%s\n' "$max_glibc" GLIBC_2.30 | sort -V | tail -n 1)" = GLIBC_2.30
-          (cd dist && zip -r ../OpenTS-ARM64-Widescreen-Touch-Update.zip OpenTS-A.sh opentsa)
+          (cd dist && zip -r ../OpenTS-ARM64-Adaptive-Display-v0.2.1.zip OpenTS-A.sh opentsa)
           tar -czf OpenTS-ARM-source-16x9-touch-controls.tar.gz -C build-source .
 
       - name: Keep a build artifact for inspection
         uses: actions/upload-artifact@v4
         with:
           name: OpenTS-ARM64-Widescreen-Touch-Update
-          path: OpenTS-ARM64-Widescreen-Touch-Update.zip
+          path: OpenTS-ARM64-Adaptive-Display-v0.2.1.zip
           if-no-files-found: error
 
       - name: Create the v0.2.1 draft release
@@ -133,7 +133,7 @@ jobs:
           4. Launch the game and confirm your saves are present. You do not need to recopy game data.
 
           ## Assets
-          - `OpenTS-ARM64-Widescreen-Touch-Update.zip`: installable build.
+          - `OpenTS-ARM64-Adaptive-Display-v0.2.1.zip`: installable build.
           - `OpenTS-ARM-source-16x9-touch-controls.tar.gz`: source snapshot.
           - `OpenTS-ARM64-16x9-touch-controls.patch` and `OpenTS-ARM64-auto-display.patch`: source changes.
           - `OpenTS-ARM64-README.md`: setup reference.
@@ -142,18 +142,28 @@ jobs:
           BODY
 
           if gh release view v0.2.1 >/dev/null 2>&1; then
-            echo "Release tag v0.2.1 already exists; refusing to overwrite it." >&2
-            exit 1
+            existing_asset=$(gh release view v0.2.1 --json assets --jq '.assets[].name' | grep -Fx 'OpenTS-ARM64-Widescreen-Touch-Update.zip' || true)
+            if [ -n "$existing_asset" ]; then
+              gh release delete-asset v0.2.1 "$existing_asset" --yes
+            fi
+            gh release upload v0.2.1 \
+              OpenTS-ARM64-Adaptive-Display-v0.2.1.zip \
+              OpenTS-ARM-source-16x9-touch-controls.tar.gz \
+              OpenTS-ARM64-16x9-touch-controls.patch \
+              OpenTS-ARM64-auto-display.patch \
+              OpenTS-ARM64-README.md \
+              --clobber
+            gh release edit v0.2.1 --title "$title" --notes-file "$notes_file"
+          else
+            gh release create v0.2.1 \
+              OpenTS-ARM64-Adaptive-Display-v0.2.1.zip \
+              OpenTS-ARM-source-16x9-touch-controls.tar.gz \
+              OpenTS-ARM64-16x9-touch-controls.patch \
+              OpenTS-ARM64-auto-display.patch \
+              OpenTS-ARM64-README.md \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --draft \
+              --title "$title" \
+              --notes-file "$notes_file"
           fi
-
-          gh release create v0.2.1 \
-            OpenTS-ARM64-Widescreen-Touch-Update.zip \
-            OpenTS-ARM-source-16x9-touch-controls.tar.gz \
-            OpenTS-ARM64-16x9-touch-controls.patch \
-            OpenTS-ARM64-auto-display.patch \
-            OpenTS-ARM64-README.md \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --draft \
-            --title "$title" \
-            --notes-file "$notes_file"
