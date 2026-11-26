@@ -465,16 +465,24 @@ diff --git a/platform/portmaster/video.h b/platform/portmaster/video.h
 diff --git a/code/portmaster_input.cpp b/code/portmaster_input.cpp
 --- a/code/portmaster_input.cpp
 +++ b/code/portmaster_input.cpp
-@@ -59,7 +59,7 @@
+@@ -43,6 +43,7 @@
+ int NameEntryLetter = 0;
+ int NameEntryPendingKey = 0;
+ SDL_FingerID ActiveFinger = -1;
++constexpr int RawJoystickButtonCount = 256;
+ 
+ void Load_Controls()
+ {
+@@ -59,7 +60,7 @@
  	std::fclose(file);
  	if (!valid) return;
  	for (int i = 0; i < (version == 1 ? PM_CONTROL_COUNT - 1 : PM_CONTROL_COUNT); ++i)
 -		if (values[i] == -1 || (values[i] >= 0 && values[i] < SDL_CONTROLLER_BUTTON_MAX)) ControlButtons[i] = values[i];
-+		if (values[i] == -1 || (values[i] >= 0 && values[i] < SDL_CONTROLLER_BUTTON_MAX + SDL_JOYSTICK_BUTTON_MAX)) ControlButtons[i] = values[i];
++		if (values[i] == -1 || (values[i] >= 0 && values[i] < SDL_CONTROLLER_BUTTON_MAX + RawJoystickButtonCount)) ControlButtons[i] = values[i];
  	CursorSpeed = std::clamp(speed, 1, 16);
  }
  
-@@ -151,6 +151,8 @@
+@@ -151,6 +152,8 @@
  
  void FindController()
  {
@@ -483,7 +491,7 @@ diff --git a/code/portmaster_input.cpp b/code/portmaster_input.cpp
  	for (int index = 0; index < SDL_NumJoysticks(); ++index) {
  		if (!SDL_IsGameController(index)) {
  			continue;
-@@ -201,6 +203,78 @@
+@@ -201,6 +204,78 @@
  			int distance = std::abs(pan_y) * 2;
  			Map.Scroll_Map(pan_y > 0 ? FACING_S : FACING_N, distance, true);
  		}
@@ -562,7 +570,7 @@ diff --git a/code/portmaster_input.cpp b/code/portmaster_input.cpp
  	}
  }
  }
-@@ -213,8 +287,14 @@
+@@ -213,8 +288,14 @@
  void PortMaster_Adjust_Cursor_Speed(int delta) { Load_Controls(); CursorSpeed = std::clamp(CursorSpeed + delta, 1, 16); }
  const char *PortMaster_Button_Name(int button)
  {
@@ -571,7 +579,7 @@ diff --git a/code/portmaster_input.cpp b/code/portmaster_input.cpp
 +	static const char *names[] = {"A", "B", "X", "Y", "Back", "Guide", "Start", "L3", "R3", "L1", "R1", "D-pad Up", "D-pad Down", "D-pad Left", "D-pad Right", "Misc", "Paddle 1", "Paddle 2", "Paddle 3", "Paddle 4", "Touchpad"};
 +	static char raw_name[32];
 +	if (button >= 0 && button < static_cast<int>(SDL_arraysize(names))) return names[button];
-+	if (button >= SDL_CONTROLLER_BUTTON_MAX && button < SDL_CONTROLLER_BUTTON_MAX + SDL_JOYSTICK_BUTTON_MAX) {
++	if (button >= SDL_CONTROLLER_BUTTON_MAX && button < SDL_CONTROLLER_BUTTON_MAX + RawJoystickButtonCount) {
 +		std::snprintf(raw_name, sizeof(raw_name), "Button %d", button - SDL_CONTROLLER_BUTTON_MAX);
 +		return raw_name;
 +	}
@@ -579,7 +587,7 @@ diff --git a/code/portmaster_input.cpp b/code/portmaster_input.cpp
  }
  void PortMaster_Set_Name_Entry(bool active) { NameEntryActive = active; NameEntryLetter = 0; NameEntryPendingKey = 0; }
  int PortMaster_Name_Entry_Letter() { return NameEntryLetter; }
-@@ -301,60 +381,16 @@
+@@ -301,60 +382,16 @@
  			break;
  		case SDL_CONTROLLERBUTTONDOWN:
  		case SDL_CONTROLLERBUTTONUP:
