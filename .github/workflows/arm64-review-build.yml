@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/arm64-review-build.yml'
       - 'OpenTS-ARM64-16x9-touch-controls.patch'
+      - 'OpenTS-ARM64-auto-display.patch'
       - 'OpenTS-ARM64-README.md'
 
 permissions:
@@ -23,6 +24,7 @@ jobs:
           mkdir -p build-source dist/opentsa/data dist/opentsa/lib
           tar -xzf OpenTS-ARM-source.tar.gz --strip-components=1 -C build-source
           patch -d build-source -p1 < OpenTS-ARM64-16x9-touch-controls.patch
+          patch -d build-source -p1 < OpenTS-ARM64-auto-display.patch
           cp build-source/platform/portmaster/OpenTS-A.sh dist/
           cp build-source/LICENSE.md build-source/THIRD_PARTY_NOTICES.md \
             build-source/platform/portmaster/README.md dist/opentsa/
@@ -98,45 +100,60 @@ jobs:
           path: OpenTS-ARM64-Widescreen-Touch-Update.zip
           if-no-files-found: error
 
-      - name: Attach the corrected package and source to the GitHub draft
+      - name: Create the v0.2.1 draft release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          release_id=$(gh api "repos/${GITHUB_REPOSITORY}/releases" --paginate \
-            --jq '.[] | select(.draft == true and .name == "OpenTS-ARM64 — Widescreen and Controls Update") | .id' | head -n 1)
-          if [ -z "$release_id" ]; then
-            echo 'The expected review draft was not found; keeping the build as an Actions artifact.'
+          title="OpenTS-ARM64 — Adaptive Display Update"
+          notes_file=$(mktemp)
+          cat > "$notes_file" <<'BODY'
+          OpenTS-ARM64 is an ARM64 Linux handheld build of OpenTS-A for Command & Conquer: Tiberian Sun and Firestorm. This release updates full-screen sizing for handheld displays. Game data is not included.
+
+          ## Device support
+          The build targets ARM64 PortMaster-compatible Linux handhelds. Confirmed tested on an R36S Clone running ArkOS4Clone-20261008; other device and firmware combinations are not yet individually verified.
+
+          ## Display and controls
+          - Detects the display drawable size at launch and requests fullscreen, with a borderless display-size fallback for SDL backends that leave the window at 640×480.
+          - Adapts the game frame width to widescreen aspect ratios and scales the frame to the available display while preserving proportions. Very tall or portrait screens may show bars.
+          - Keeps controller button assignments, cursor speed, touchscreen taps and drags, cursor animation, and zoom-aligned selection.
+          - “Place Ready Building” can be assigned in Options > Controls.
+
+          ## Fresh install
+          1. Extract the ZIP into the handheld’s `ports/` folder. Keep `OpenTS-A.sh` beside `opentsa/`.
+          2. Copy the contents of your Command & Conquer: Tiberian Sun and Firestorm install folder into `ports/opentsa/data/`.
+          3. Refresh the Ports list and launch OpenTS-A.
+
+          The game folder should contain: `TIBSUN.MIX`, `GMENU.MIX`, `EXPAND01.MIX`, `EXPAND02.MIX`, `EXPAND03.MIX`, `E01SCD01.MIX`, `E01SCD02.MIX`, `MAPS01.MIX`, `MAPS02.MIX`, `maps03.mix`, `MOVIES01.MIX`, `MOVIES02.MIX`, `movies03.mix`, `MULTI.MIX`, `PATCH.MIX`, `SCORES.MIX`, `SCORES01.MIX`, `sidecd01.mix`, `sidecd02.mix`, `wdt.mix`, and `wdtvox.mix`. Copy the files themselves, not their parent folder. Game data is not included.
+
+          ## Updating an existing installation
+          1. Close the game and back up your existing `ports/opentsa/` folder, including saves and settings.
+          2. Extract the new ZIP into the existing `ports/` folder and replace the older launcher and engine files.
+          3. Keep the existing `opentsa/data/` folder and save/settings files. Do not delete the existing `opentsa/` folder first; if asked about existing game data or saves, keep those copies.
+          4. Launch the game and confirm your saves are present. You do not need to recopy game data.
+
+          ## Assets
+          - `OpenTS-ARM64-Widescreen-Touch-Update.zip`: installable build.
+          - `OpenTS-ARM-source-16x9-touch-controls.tar.gz`: source snapshot.
+          - `OpenTS-ARM64-16x9-touch-controls.patch` and `OpenTS-ARM64-auto-display.patch`: source changes.
+          - `OpenTS-ARM64-README.md`: setup reference.
+
+          OpenTS-A is based on the OpenTS engine. Tiberian Sun and Firestorm data are not included and remain the property of their rights holders. This is an unofficial community build, not affiliated with or endorsed by Electronic Arts. See the included licence and third-party notices.
+          BODY
+
+          if gh release view v0.2.1 >/dev/null 2>&1; then
+            echo "Release tag v0.2.1 already exists; refusing to overwrite it." >&2
             exit 1
           fi
-          for asset_name in OpenTS-ARM64-Widescreen-Touch-Update.zip OpenTS-ARM-source-16x9-touch-controls.tar.gz OpenTS-ARM64-16x9-touch-controls.patch OpenTS-ARM64-README.md; do
-            gh api "repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets" \
-              --jq ".[] | select(.name == \"${asset_name}\") | .id" | while read -r asset_id; do
-                [ -z "$asset_id" ] || gh api --method DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/${asset_id}" >/dev/null
-              done
-          done
-          body=$(cat <<'BODY'
-          Draft for review — not public. The previous R36S test returned to Ports because the new launcher expected opents-a. The established install folder is opentsa (without a hyphen); this package now uses opentsa/data. The earlier binary also required glibc 2.34 while the R36S reports 2.30. This build targets glibc 2.28 and bundles its LLVM C++ runtime. Device retesting on the R36S is still required before publication.
 
-          This update addresses the RP6 display and touchscreen feedback:
-          - The game chooses a widescreen battlefield width for the device display while retaining its 480-pixel logical height.
-          - Touch taps and drags are mapped into game coordinates.
-          - “Place Ready Building” is assignable in Options > Controls.
-          - The Controls menu layout and ARM64 README are updated.
-          - Original animated mouse-pointer frames now advance at their configured game rates.
-          - Cursor shape changes follow the original game's state even without an SDL mouse cursor object.
-          - Raw joystick buttons remain assignable when SDL has no standard controller mapping for them.
-          - The original cursor stays at normal size while zoomed, and drag selection follows it.
-
-          The rebuilt ARM64 ZIP, source snapshot, patch, and README are attached for review. This remains an unpublished draft.
-          BODY
-          )
-          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${release_id}" -f body="$body" >/dev/null
-          for asset in OpenTS-ARM64-Widescreen-Touch-Update.zip OpenTS-ARM-source-16x9-touch-controls.tar.gz OpenTS-ARM64-16x9-touch-controls.patch OpenTS-ARM64-README.md; do
-            curl --fail-with-body --silent --show-error --location --request POST \
-              --header "Authorization: Bearer ${GH_TOKEN}" \
-              --header 'Accept: application/vnd.github+json' \
-              --header 'Content-Type: application/octet-stream' \
-              --data-binary @"${asset}" \
-              "https://uploads.github.com/repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets?name=${asset}"
-          done
+          gh release create v0.2.1 \
+            OpenTS-ARM64-Widescreen-Touch-Update.zip \
+            OpenTS-ARM-source-16x9-touch-controls.tar.gz \
+            OpenTS-ARM64-16x9-touch-controls.patch \
+            OpenTS-ARM64-auto-display.patch \
+            OpenTS-ARM64-README.md \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --draft \
+            --title "$title" \
+            --notes-file "$notes_file"
