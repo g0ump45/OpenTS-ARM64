@@ -1,0 +1,140 @@
+--- a/platform/portmaster/video.c
++++ b/platform/portmaster/video.c
+@@ -7,20 +7,63 @@
+     }
+ 
+     video->window = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED,
+-        SDL_WINDOWPOS_CENTERED, width, height, SDL_WINDOW_FULLSCREEN_DESKTOP);
+-    if (video->window) {
+-        video->renderer = SDL_CreateRenderer(video->window, -1, 0);
++        SDL_WINDOWPOS_CENTERED, width, height,
++        SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_ALLOW_HIGHDPI);
++    if (!video->window) return -1;
++
++    /* Some handheld SDL backends accept the fullscreen flag but leave the window at
++     * the requested 640x480 size. Ask SDL to enter desktop fullscreen explicitly,
++     * then use the display bounds as a borderless fallback if it did not take. */
++    if ((SDL_GetWindowFlags(video->window) & SDL_WINDOW_FULLSCREEN) == 0) {
++        (void)SDL_SetWindowFullscreen(video->window, SDL_WINDOW_FULLSCREEN_DESKTOP);
++    }
++
++    int display_index = SDL_GetWindowDisplayIndex(video->window);
++    SDL_Rect display_bounds = {0, 0, 0, 0};
++    SDL_bool have_display_bounds = display_index >= 0 && SDL_GetDisplayBounds(display_index, &display_bounds) == 0
++        && display_bounds.w > 0 && display_bounds.h > 0;
++
++    int window_width = 0, window_height = 0;
++    SDL_GetWindowSize(video->window, &window_width, &window_height);
++    if (have_display_bounds &&
++        (window_width < display_bounds.w || window_height < display_bounds.h)) {
++        SDL_SetWindowFullscreen(video->window, 0);
++        SDL_SetWindowBordered(video->window, SDL_FALSE);
++        SDL_SetWindowPosition(video->window, display_bounds.x, display_bounds.y);
++        SDL_SetWindowSize(video->window, display_bounds.w, display_bounds.h);
++        SDL_GetWindowSize(video->window, &window_width, &window_height);
++    }
++
++    video->renderer = SDL_CreateRenderer(video->window, -1, 0);
++    if (!video->renderer) {
++        PortMaster_CloseVideo(video);
++        return -1;
++    }
++
++    int output_width = 0, output_height = 0;
++    if (SDL_GetRendererOutputSize(video->renderer, &output_width, &output_height) != 0 ||
++        output_width <= 0 || output_height <= 0) {
++        SDL_GetWindowSize(video->window, &output_width, &output_height);
++    }
++    if ((output_width <= 0 || output_height <= 0) && have_display_bounds) {
++        output_width = display_bounds.w;
++        output_height = display_bounds.h;
++    }
++    if (output_width <= 0 || output_height <= 0) {
++        PortMaster_CloseVideo(video);
++        return SDL_SetError("Unable to determine handheld display size");
+     }
+-    int output_width = width, output_height = height;
+-    if (video->renderer) SDL_GetRendererOutputSize(video->renderer, &output_width, &output_height);
++
++    SDL_Log("OpenTS display: bounds=%dx%d window=%dx%d drawable=%dx%d",
++        have_display_bounds ? display_bounds.w : 0,
++        have_display_bounds ? display_bounds.h : 0,
++        window_width, window_height, output_width, output_height);
+     if (output_width > 0 && output_height > 0) {
+         int const aspect_width = (int)(((Sint64)height * output_width + output_height / 2) / output_height);
+         if (aspect_width > width) width = aspect_width;
+     }
+-    if (video->renderer) {
+-        video->texture = SDL_CreateTexture(video->renderer, SDL_PIXELFORMAT_RGB565,
+-            SDL_TEXTUREACCESS_STREAMING, width, height);
+-    }
++    video->texture = SDL_CreateTexture(video->renderer, SDL_PIXELFORMAT_RGB565,
++        SDL_TEXTUREACCESS_STREAMING, width, height);
+     if (!video->texture) {
+         PortMaster_CloseVideo(video);
+         return -1;
+@@ -29,15 +72,37 @@
+     video->width = width;
+     video->height = height;
+     video->destination = (SDL_Rect){0, 0, output_width, output_height};
++    SDL_Log("OpenTS game frame: %dx%d -> %dx%d",
++        video->width, video->height, video->destination.w, video->destination.h);
+     return 0;
+ }
+ 
+-int PortMaster_PresentFrame(const PortMasterVideo *video, const void *pixels, int pitch)
++int PortMaster_PresentFrame(PortMasterVideo *video, const void *pixels, int pitch)
+ {
+-    if (!video->texture || !pixels || pitch < video->width * 2) {
+-        return SDL_SetError("Invalid RGB565 frame");
++    return PortMaster_PresentFrameWithCursor(video, pixels, pitch, NULL, 0, NULL);
++}
++
++int PortMaster_PresentFrameWithCursor(PortMasterVideo *video, const void *pixels, int pitch,
++    const void *cursor_rgba, int cursor_pitch, const SDL_Rect *cursor_rect)
++{
++    if (!video->texture || !pixels || pitch < video->width * 2 ||
++        (cursor_rgba && (!cursor_rect || cursor_rect->w <= 0 || cursor_rect->h <= 0 ||
++            cursor_pitch < cursor_rect->w * 4))) {
++        return SDL_SetError("Invalid RGB565 frame or RGBA cursor");
++    }
++    if (cursor_rgba && (!video->cursor_texture || video->cursor_texture_width != cursor_rect->w ||
++        video->cursor_texture_height != cursor_rect->h)) {
++        if (video->cursor_texture) SDL_DestroyTexture(video->cursor_texture);
++        video->cursor_texture = SDL_CreateTexture(video->renderer, SDL_PIXELFORMAT_RGBA32,
++            SDL_TEXTUREACCESS_STREAMING, cursor_rect->w, cursor_rect->h);
++        video->cursor_texture_width = cursor_rect->w;
++        video->cursor_texture_height = cursor_rect->h;
++        if (!video->cursor_texture || SDL_SetTextureBlendMode(video->cursor_texture, SDL_BLENDMODE_BLEND) != 0) {
++            return -1;
++        }
+     }
+     if (SDL_UpdateTexture(video->texture, NULL, pixels, pitch) != 0 ||
++        (cursor_rgba && SDL_UpdateTexture(video->cursor_texture, NULL, cursor_rgba, cursor_pitch) != 0) ||
+         SDL_RenderClear(video->renderer) != 0 ||
+         SDL_RenderCopy(video->renderer, video->texture, NULL,
+             video->destination.w > 0 && video->destination.h > 0 ? &video->destination : NULL) != 0) {
+@@ -47,12 +112,23 @@
+         SDL_RenderCopy(video->renderer, video->texture, &video->zoom_source, &video->zoom_destination) != 0) {
+         return -1;
+     }
++    if (cursor_rgba) {
++        SDL_Rect cursor_destination = {
++            video->destination.x + cursor_rect->x * video->destination.w / video->width,
++            video->destination.y + cursor_rect->y * video->destination.h / video->height,
++            SDL_max(1, cursor_rect->w * video->destination.w / video->width),
++            SDL_max(1, cursor_rect->h * video->destination.h / video->height)};
++        if (SDL_RenderCopy(video->renderer, video->cursor_texture, NULL, &cursor_destination) != 0) {
++            return -1;
++        }
++    }
+     SDL_RenderPresent(video->renderer);
+     return 0;
+ }
+ 
+ void PortMaster_CloseVideo(PortMasterVideo *video)
+ {
++    if (video->cursor_texture) SDL_DestroyTexture(video->cursor_texture);
+     if (video->texture) SDL_DestroyTexture(video->texture);
+     if (video->renderer) SDL_DestroyRenderer(video->renderer);
+     if (video->window) SDL_DestroyWindow(video->window);
