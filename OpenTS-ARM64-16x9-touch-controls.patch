@@ -473,16 +473,25 @@ diff --git a/code/portmaster_input.cpp b/code/portmaster_input.cpp
  
  void Load_Controls()
  {
-@@ -59,7 +60,7 @@
+@@ -59,7 +60,16 @@
  	std::fclose(file);
  	if (!valid) return;
  	for (int i = 0; i < (version == 1 ? PM_CONTROL_COUNT - 1 : PM_CONTROL_COUNT); ++i)
 -		if (values[i] == -1 || (values[i] >= 0 && values[i] < SDL_CONTROLLER_BUTTON_MAX)) ControlButtons[i] = values[i];
 +		if (values[i] == -1 || (values[i] >= 0 && values[i] < SDL_CONTROLLER_BUTTON_MAX + RawJoystickButtonCount)) ControlButtons[i] = values[i];
++	for (int i = 0; i < PM_CONTROL_COUNT; ++i) {
++		if (ControlButtons[i] < 0) continue;
++		for (int earlier = 0; earlier < i; ++earlier) {
++			if (ControlButtons[earlier] == ControlButtons[i]) {
++				ControlButtons[i] = -1;
++				break;
++			}
++		}
++	}
  	CursorSpeed = std::clamp(speed, 1, 16);
  }
  
-@@ -151,6 +152,8 @@
+@@ -151,6 +161,8 @@
  
  void FindController()
  {
@@ -491,7 +500,7 @@ diff --git a/code/portmaster_input.cpp b/code/portmaster_input.cpp
  	for (int index = 0; index < SDL_NumJoysticks(); ++index) {
  		if (!SDL_IsGameController(index)) {
  			continue;
-@@ -201,6 +204,78 @@
+@@ -201,6 +213,81 @@
  			int distance = std::abs(pan_y) * 2;
  			Map.Scroll_Map(pan_y > 0 ? FACING_S : FACING_N, distance, true);
  		}
@@ -516,6 +525,9 @@ diff --git a/code/portmaster_input.cpp b/code/portmaster_input.cpp
 +	if (!Keyboard) return;
 +	if (CaptureAction >= 0) {
 +		if (pressed) {
++			for (int action = 0; action < PM_CONTROL_COUNT; ++action) {
++				if (action != CaptureAction && ControlButtons[action] == button) ControlButtons[action] = -1;
++			}
 +			ControlButtons[CaptureAction] = button;
 +			CapturedButton = button;
 +			CaptureAction = -1;
@@ -570,7 +582,7 @@ diff --git a/code/portmaster_input.cpp b/code/portmaster_input.cpp
  	}
  }
  }
-@@ -213,8 +288,14 @@
+@@ -213,8 +300,14 @@
  void PortMaster_Adjust_Cursor_Speed(int delta) { Load_Controls(); CursorSpeed = std::clamp(CursorSpeed + delta, 1, 16); }
  const char *PortMaster_Button_Name(int button)
  {
@@ -587,7 +599,7 @@ diff --git a/code/portmaster_input.cpp b/code/portmaster_input.cpp
  }
  void PortMaster_Set_Name_Entry(bool active) { NameEntryActive = active; NameEntryLetter = 0; NameEntryPendingKey = 0; }
  int PortMaster_Name_Entry_Letter() { return NameEntryLetter; }
-@@ -301,60 +382,16 @@
+@@ -301,60 +394,16 @@
  			break;
  		case SDL_CONTROLLERBUTTONDOWN:
  		case SDL_CONTROLLERBUTTONUP:
