@@ -124,6 +124,8 @@ jobs:
           - “Place Ready Building” is assignable in Options > Controls.
           - The Controls menu layout and ARM64 README are updated.
           - Original animated mouse-pointer frames now advance at their configured game rates.
+          - Cursor shape changes follow the original game's state even without an SDL mouse cursor object.
+          - Raw joystick buttons remain assignable when SDL has no standard controller mapping for them.
           - The original cursor stays at normal size while zoomed, and drag selection follows it.
 
           The rebuilt ARM64 ZIP, source snapshot, patch, and README are attached for review. This remains an unpublished draft.

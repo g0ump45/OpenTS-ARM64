@@ -465,16 +465,218 @@ diff --git a/platform/portmaster/video.h b/platform/portmaster/video.h
 diff --git a/code/portmaster_input.cpp b/code/portmaster_input.cpp
 --- a/code/portmaster_input.cpp
 +++ b/code/portmaster_input.cpp
-@@ -332,4 +332,9 @@
- 				}
- 				break;
- 			}
-+			if (event.cbutton.button == SDL_CONTROLLER_BUTTON_START) {
-+				Keyboard->Put(event.type == SDL_CONTROLLERBUTTONDOWN ? KN_ESC : KN_ESC | KN_RLSE_BIT);
-+				if (event.type == SDL_CONTROLLERBUTTONDOWN) DebugString("PortMaster: Start button mapped to Escape.\n");
-+				break;
+@@ -59,7 +59,7 @@
+ 	std::fclose(file);
+ 	if (!valid) return;
+ 	for (int i = 0; i < (version == 1 ? PM_CONTROL_COUNT - 1 : PM_CONTROL_COUNT); ++i)
+-		if (values[i] == -1 || (values[i] >= 0 && values[i] < SDL_CONTROLLER_BUTTON_MAX)) ControlButtons[i] = values[i];
++		if (values[i] == -1 || (values[i] >= 0 && values[i] < SDL_CONTROLLER_BUTTON_MAX + SDL_JOYSTICK_BUTTON_MAX)) ControlButtons[i] = values[i];
+ 	CursorSpeed = std::clamp(speed, 1, 16);
+ }
+ 
+@@ -151,6 +151,8 @@
+ 
+ void FindController()
+ {
++	SDL_JoystickEventState(SDL_ENABLE);
++	SDL_GameControllerEventState(SDL_ENABLE);
+ 	for (int index = 0; index < SDL_NumJoysticks(); ++index) {
+ 		if (!SDL_IsGameController(index)) {
+ 			continue;
+@@ -201,6 +203,78 @@
+ 			int distance = std::abs(pan_y) * 2;
+ 			Map.Scroll_Map(pan_y > 0 ? FACING_S : FACING_N, distance, true);
+ 		}
++	}
++}
++
++constexpr int RawButtonBase = SDL_CONTROLLER_BUTTON_MAX;
++
++bool Raw_Button_Is_Mapped(Uint8 button)
++{
++	if (!Controller) return false;
++	for (int index = 0; index < SDL_CONTROLLER_BUTTON_MAX; ++index) {
++		SDL_GameControllerButtonBind const bind = SDL_GameControllerGetBindForButton(
++			Controller, static_cast<SDL_GameControllerButton>(index));
++		if (bind.bindType == SDL_CONTROLLER_BINDTYPE_BUTTON && bind.value.button == button) return true;
++	}
++	return false;
++}
++
++void Handle_Button_Event(int button, bool pressed, bool &group_menu_open, bool &open_groups)
++{
++	if (!Keyboard) return;
++	if (CaptureAction >= 0) {
++		if (pressed) {
++			ControlButtons[CaptureAction] = button;
++			CapturedButton = button;
++			CaptureAction = -1;
++		}
++		return;
++	}
++	if (NameEntryActive) {
++		if (pressed) {
++			switch (button) {
++				case SDL_CONTROLLER_BUTTON_DPAD_LEFT: NameEntryLetter = (NameEntryLetter + 26) % 27; break;
++				case SDL_CONTROLLER_BUTTON_DPAD_RIGHT: NameEntryLetter = (NameEntryLetter + 1) % 27; break;
++				case SDL_CONTROLLER_BUTTON_DPAD_UP: NameEntryLetter = (NameEntryLetter + 13) % 27; break;
++				case SDL_CONTROLLER_BUTTON_DPAD_DOWN: NameEntryLetter = (NameEntryLetter + 14) % 27; break;
++				case SDL_CONTROLLER_BUTTON_A: NameEntryPendingKey = NameEntryLetter == 26 ? 32 : 'A' + NameEntryLetter; break;
++				case SDL_CONTROLLER_BUTTON_B: NameEntryPendingKey = KN_BACKSPACE; break;
++				default:
++					if (button == ControlButtons[PM_CONTROL_OPTIONS]) NameEntryPendingKey = KN_RETURN;
++					break;
 +			}
- 			if (event.cbutton.button == ControlButtons[PM_CONTROL_LEFT_CLICK]) {
++		}
++		return;
++	}
++	if (button == ControlButtons[PM_CONTROL_OPTIONS]) {
++		Keyboard->Put(pressed ? KN_ESC : KN_ESC | KN_RLSE_BIT);
++		if (pressed) DebugString("PortMaster: Options button received (%d).\n", button);
++		return;
++	}
++	if (button == ControlButtons[PM_CONTROL_LEFT_CLICK]) {
++		SendClick(KN_LMOUSE, pressed, LeftHeld);
++	} else if (button == ControlButtons[PM_CONTROL_RIGHT_CLICK] && !group_menu_open) {
++		SendClick(KN_RMOUSE, pressed, RightHeld);
++	} else if (button == ControlButtons[PM_CONTROL_GROUPS] ||
++		(button == ControlButtons[PM_CONTROL_RIGHT_CLICK] && group_menu_open)) {
++		if (pressed) {
++			if (group_menu_open) Keyboard->Put(KN_ESC);
++			else if (PortMaster_Battlefield_Input_Active() && !LeftHeld && !RightHeld) open_groups = true;
++		}
++	} else if (pressed && PortMaster_Battlefield_Input_Active() &&
++		!LeftHeld && !RightHeld && !Map.PendingObjectPtr) {
++		if (button == ControlButtons[PM_CONTROL_SELECT_TYPE]) {
++			Execute_Command("SelectType");
++		} else if (button == ControlButtons[PM_CONTROL_PLACE_READY_BUILDING]) {
++			if (Map.Place_Ready_Building()) Video_Mark_Dirty();
++		} else if (button == ControlButtons[PM_CONTROL_ATTACK_MOVE]) {
++			Point2D const cursor = Keyboard->Get_Mouse_Position();
++			if (TacticalRect.Is_Point_Within(cursor)) {
++				Cell const cell = TacticalMap->Pixel_To_Cell(cursor);
++				if (Map.In_Radar(cell)) Map.Active_Click(nullptr, cell, ACTION_PATROL_WAYPOINT);
++			}
++		} else if (button == ControlButtons[PM_CONTROL_ZOOM_OUT]) PortMaster_Adjust_Zoom(-1);
++		else if (button == ControlButtons[PM_CONTROL_ZOOM_IN]) PortMaster_Adjust_Zoom(1);
+ 	}
+ }
+ }
+@@ -213,8 +287,14 @@
+ void PortMaster_Adjust_Cursor_Speed(int delta) { Load_Controls(); CursorSpeed = std::clamp(CursorSpeed + delta, 1, 16); }
+ const char *PortMaster_Button_Name(int button)
+ {
+-	static const char *names[] = {"A", "B", "X", "Y", "Back", "Guide", "Start", "L3", "R3", "L1", "R1", "D-pad Up", "D-pad Down", "D-pad Left", "D-pad Right"};
+-	return button >= 0 && button < static_cast<int>(SDL_arraysize(names)) ? names[button] : button >= 0 ? "Other" : "Unassigned";
++	static const char *names[] = {"A", "B", "X", "Y", "Back", "Guide", "Start", "L3", "R3", "L1", "R1", "D-pad Up", "D-pad Down", "D-pad Left", "D-pad Right", "Misc", "Paddle 1", "Paddle 2", "Paddle 3", "Paddle 4", "Touchpad"};
++	static char raw_name[32];
++	if (button >= 0 && button < static_cast<int>(SDL_arraysize(names))) return names[button];
++	if (button >= SDL_CONTROLLER_BUTTON_MAX && button < SDL_CONTROLLER_BUTTON_MAX + SDL_JOYSTICK_BUTTON_MAX) {
++		std::snprintf(raw_name, sizeof(raw_name), "Button %d", button - SDL_CONTROLLER_BUTTON_MAX);
++		return raw_name;
++	}
++	return button >= 0 ? "Other" : "Unassigned";
+ }
+ void PortMaster_Set_Name_Entry(bool active) { NameEntryActive = active; NameEntryLetter = 0; NameEntryPendingKey = 0; }
+ int PortMaster_Name_Entry_Letter() { return NameEntryLetter; }
+@@ -301,60 +381,16 @@
+ 			break;
+ 		case SDL_CONTROLLERBUTTONDOWN:
+ 		case SDL_CONTROLLERBUTTONUP:
+-			if (event.cbutton.which != ControllerId || !Keyboard) {
+-				break;
+-			}
+-			if (CaptureAction >= 0) {
+-				if (event.type == SDL_CONTROLLERBUTTONDOWN) {
+-					ControlButtons[CaptureAction] = event.cbutton.button;
+-					CapturedButton = event.cbutton.button;
+-					CaptureAction = -1;
+-				}
+-				break;
+-			}
+-			if (NameEntryActive) {
+-				if (event.type == SDL_CONTROLLERBUTTONDOWN) {
+-					switch (event.cbutton.button) {
+-						case SDL_CONTROLLER_BUTTON_DPAD_LEFT: NameEntryLetter = (NameEntryLetter + 26) % 27; break;
+-						case SDL_CONTROLLER_BUTTON_DPAD_RIGHT: NameEntryLetter = (NameEntryLetter + 1) % 27; break;
+-						case SDL_CONTROLLER_BUTTON_DPAD_UP: NameEntryLetter = (NameEntryLetter + 13) % 27; break;
+-						case SDL_CONTROLLER_BUTTON_DPAD_DOWN: NameEntryLetter = (NameEntryLetter + 14) % 27; break;
+-						case SDL_CONTROLLER_BUTTON_A: NameEntryPendingKey = NameEntryLetter == 26 ? 32 : 'A' + NameEntryLetter; break;
+-						case SDL_CONTROLLER_BUTTON_B: NameEntryPendingKey = KN_BACKSPACE; break;
+-						case SDL_CONTROLLER_BUTTON_START: NameEntryPendingKey = KN_RETURN; break;
+-					}
+-				}
+-				break;
+-			}
+-			if (event.cbutton.button == ControlButtons[PM_CONTROL_LEFT_CLICK]) {
+-				SendClick(KN_LMOUSE, event.type == SDL_CONTROLLERBUTTONDOWN, LeftHeld);
+-			} else if (event.cbutton.button == ControlButtons[PM_CONTROL_RIGHT_CLICK] && !group_menu_open) {
+-				SendClick(KN_RMOUSE, event.type == SDL_CONTROLLERBUTTONDOWN, RightHeld);
+-			} else if (event.cbutton.button == ControlButtons[PM_CONTROL_GROUPS] ||
+-				(event.cbutton.button == ControlButtons[PM_CONTROL_RIGHT_CLICK] && group_menu_open)) {
+-				if (event.type == SDL_CONTROLLERBUTTONDOWN) {
+-					if (group_menu_open) {
+-						Keyboard->Put(KN_ESC);
+-					} else if (PortMaster_Battlefield_Input_Active() && !LeftHeld && !RightHeld) {
+-						open_groups = true;
+-					}
+-				}
+-			} else if (event.cbutton.button == ControlButtons[PM_CONTROL_OPTIONS]) {
+-				Keyboard->Put(event.type == SDL_CONTROLLERBUTTONDOWN ? KN_ESC : KN_ESC | KN_RLSE_BIT);
+-			} else if (event.type == SDL_CONTROLLERBUTTONDOWN && PortMaster_Battlefield_Input_Active() &&
+-				!LeftHeld && !RightHeld && !Map.PendingObjectPtr) {
+-					if (event.cbutton.button == ControlButtons[PM_CONTROL_SELECT_TYPE]) {
+-						Execute_Command("SelectType");
+-					} else if (event.cbutton.button == ControlButtons[PM_CONTROL_PLACE_READY_BUILDING]) {
+-						if (Map.Place_Ready_Building()) Video_Mark_Dirty();
+-					} else if (event.cbutton.button == ControlButtons[PM_CONTROL_ATTACK_MOVE]) {
+-						Point2D const cursor = Keyboard->Get_Mouse_Position();
+-						if (TacticalRect.Is_Point_Within(cursor)) {
+-							Cell const cell = TacticalMap->Pixel_To_Cell(cursor);
+-							if (Map.In_Radar(cell)) Map.Active_Click(nullptr, cell, ACTION_PATROL_WAYPOINT);
+-						}
+-					} else if (event.cbutton.button == ControlButtons[PM_CONTROL_ZOOM_OUT]) PortMaster_Adjust_Zoom(-1);
+-					else if (event.cbutton.button == ControlButtons[PM_CONTROL_ZOOM_IN]) PortMaster_Adjust_Zoom(1);
++			if (event.cbutton.which == ControllerId && Keyboard) {
++				Handle_Button_Event(event.cbutton.button, event.type == SDL_CONTROLLERBUTTONDOWN,
++					group_menu_open, open_groups);
++			}
++			break;
++		case SDL_JOYBUTTONDOWN:
++		case SDL_JOYBUTTONUP:
++			if (event.jbutton.which == ControllerId && Keyboard && !Raw_Button_Is_Mapped(event.jbutton.button)) {
++				Handle_Button_Event(RawButtonBase + event.jbutton.button,
++					event.type == SDL_JOYBUTTONDOWN, group_menu_open, open_groups);
+ 			}
+ 			break;
+ 		case SDL_KEYDOWN:
+diff --git a/code/mouse.cpp b/code/mouse.cpp
+--- a/code/mouse.cpp
++++ b/code/mouse.cpp
+@@ -130,16 +130,20 @@
+ 
+ bool MouseClass::Override_Mouse_Shape(MouseType mouse, bool wsmall)
+ {
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(OPENTS_PORTMASTER)
+     if ((unsigned)mouse >= MOUSE_COUNT) return false;
++    if (CurrentMouseShape != mouse || IsSmall != wsmall) {
++        Frame = 0;
++        Timer = MouseControl[mouse].FrameRate;
++    }
+     CurrentMouseShape = mouse;
+     IsSmall = wsmall;
+-    if (!MouseCursor || !MouseShapes) {
++    if (!MouseShapes) {
+         return true;
+     }
+     int frame = Get_Mouse_Current_Frame(mouse, wsmall);
+     Point2D hotspot = Get_Mouse_Hotspot(mouse);
+-    MouseCursor->Set_Cursor(hotspot, MouseShapes, frame);
++    if (MouseCursor) MouseCursor->Set_Cursor(hotspot, MouseShapes, frame);
+     return true;
+ #else
+     if ((unsigned)mouse >= MOUSE_COUNT) return false;
 diff --git a/code/portmaster_video.cpp b/code/portmaster_video.cpp
 --- a/code/portmaster_video.cpp
 +++ b/code/portmaster_video.cpp
