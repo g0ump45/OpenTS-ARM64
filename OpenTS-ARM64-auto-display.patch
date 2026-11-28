@@ -1,6 +1,6 @@
 --- a/platform/portmaster/video.c
 +++ b/platform/portmaster/video.c
-@@ -7,20 +7,63 @@
+@@ -7,20 +7,77 @@
      }
  
      video->window = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED,
@@ -11,11 +11,13 @@
 +        SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_ALLOW_HIGHDPI);
 +    if (!video->window) return -1;
 +
-+    /* Some handheld SDL backends accept the fullscreen flag but leave the window at
-+     * the requested 640x480 size. Ask SDL to enter desktop fullscreen explicitly,
-+     * then use the display bounds as a borderless fallback if it did not take. */
-+    if ((SDL_GetWindowFlags(video->window) & SDL_WINDOW_FULLSCREEN) == 0) {
-+        (void)SDL_SetWindowFullscreen(video->window, SDL_WINDOW_FULLSCREEN_DESKTOP);
++    /* Fullscreen size changes are asynchronous on some compositors (including
++     * Wayland/Sway). Keep the fullscreen state and let SDL process the compositor's
++     * configure event; switching back to a manually sized window here can leave the
++     * game in a 640x480 corner window or fail window creation. */
++    if ((SDL_GetWindowFlags(video->window) & SDL_WINDOW_FULLSCREEN) == 0 &&
++        SDL_SetWindowFullscreen(video->window, SDL_WINDOW_FULLSCREEN_DESKTOP) != 0) {
++        SDL_Log("OpenTS could not request desktop fullscreen: %s", SDL_GetError());
 +    }
 +
 +    int display_index = SDL_GetWindowDisplayIndex(video->window);
@@ -27,11 +29,12 @@
 +    SDL_GetWindowSize(video->window, &window_width, &window_height);
 +    if (have_display_bounds &&
 +        (window_width < display_bounds.w || window_height < display_bounds.h)) {
-+        SDL_SetWindowFullscreen(video->window, 0);
-+        SDL_SetWindowBordered(video->window, SDL_FALSE);
-+        SDL_SetWindowPosition(video->window, display_bounds.x, display_bounds.y);
-+        SDL_SetWindowSize(video->window, display_bounds.w, display_bounds.h);
-+        SDL_GetWindowSize(video->window, &window_width, &window_height);
++        for (int attempt = 0; attempt < 100; ++attempt) {
++            SDL_PumpEvents();
++            SDL_Delay(10);
++            SDL_GetWindowSize(video->window, &window_width, &window_height);
++            if (window_width >= display_bounds.w && window_height >= display_bounds.h) break;
++        }
 +    }
 +
 +    video->renderer = SDL_CreateRenderer(video->window, -1, 0);
@@ -47,6 +50,15 @@
 +        output_width <= 0 || output_height <= 0) {
 +        SDL_GetWindowSize(video->window, &output_width, &output_height);
 +    }
++    if (have_display_bounds &&
++        (output_width < display_bounds.w || output_height < display_bounds.h)) {
++        for (int attempt = 0; attempt < 100; ++attempt) {
++            SDL_PumpEvents();
++            SDL_Delay(10);
++            if (SDL_GetRendererOutputSize(video->renderer, &output_width, &output_height) != 0) break;
++            if (output_width >= display_bounds.w && output_height >= display_bounds.h) break;
++        }
++    }
 +    if ((output_width <= 0 || output_height <= 0) && have_display_bounds) {
 +        output_width = display_bounds.w;
 +        output_height = display_bounds.h;
@@ -56,7 +68,9 @@
 +        return SDL_SetError("Unable to determine handheld display size");
 +    }
 +
-+    SDL_Log("OpenTS display: bounds=%dx%d window=%dx%d drawable=%dx%d",
++    SDL_Log("OpenTS display: driver=%s flags=0x%x bounds=%dx%d window=%dx%d drawable=%dx%d",
++        SDL_GetCurrentVideoDriver() ? SDL_GetCurrentVideoDriver() : "unknown",
++        SDL_GetWindowFlags(video->window),
 +        have_display_bounds ? display_bounds.w : 0,
 +        have_display_bounds ? display_bounds.h : 0,
 +        window_width, window_height, output_width, output_height);
@@ -73,7 +87,7 @@
      if (!video->texture) {
          PortMaster_CloseVideo(video);
          return -1;
-@@ -29,6 +72,8 @@
+@@ -29,6 +86,8 @@
      video->width = width;
      video->height = height;
      video->destination = (SDL_Rect){0, 0, output_width, output_height};
